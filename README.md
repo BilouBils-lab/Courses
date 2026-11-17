@@ -5,7 +5,8 @@ Une PWA (application web installable) pour faire les courses à deux :
 - **Fonctionne hors ligne** : l'application et la liste sont enregistrées sur le téléphone. En magasin, même sans réseau, vous pouvez cocher, ajouter et supprimer des articles. Les modifications sont envoyées automatiquement dès que le réseau revient.
 - **Partagée en temps réel** : chacun voit les ajouts et les articles cochés par l'autre (via Firebase Firestore, offre gratuite).
 - **Rangée par rayon** : les articles sont classés automatiquement (fruits & légumes, crèmerie, surgelés…) dans l'ordre d'un parcours en magasin.
-- **Saisie rapide** : « 2 lait », « farine 500g », « steak haché x4 »… La quantité est reconnue. Les articles fréquents sont proposés en suggestions.
+- **Saisie rapide** : « 2 lait », « farine 500g », « steak haché x4 »… La quantité est reconnue, et plusieurs articles peuvent être saisis d'un coup (« lait, œufs et 2 baguettes »). Les articles fréquents sont proposés en suggestions.
+- **À la voix** : bouton 🎤 dans l'application, et raccourci Siri « Dis Siri, ajoute aux courses » (voir plus bas).
 - **Design moderne**, mode sombre automatique, installable sur l'écran d'accueil (Android et iPhone).
 
 ## Utilisation
@@ -67,6 +68,14 @@ Pour un dépôt privé, GitHub Pages nécessite un abonnement payant : utilisez 
 
 Ouvrez l'application au moins une fois avec du réseau sur chaque téléphone : ensuite elle démarre sans réseau.
 
+## Ajouter avec Siri
+
+Dans l'application : 👥 › **Ajouter avec Siri**. L'écran donne les étapes et les valeurs à copier pour créer le raccourci dans l'app **Raccourcis**.
+
+Fonctionnement : le raccourci envoie la phrase dictée dans `lists/{code}/inbox` (API REST Firestore, sans connexion). La première application ouverte qui la reçoit la découpe en articles (`public/js/parse.js`), les ajoute à la liste puis supprime le message. Les règles Firestore n'autorisent dans cette boîte que la création d'un message texte court ; seule l'application connectée peut la lire.
+
+Les phrases dictées à Siri sont traitées dès qu'un des téléphones ouvre l'application.
+
 ## Développement
 
 Aucune étape de compilation : HTML, CSS et JavaScript (modules ES) uniquement.
@@ -83,6 +92,7 @@ Puis ouvrez <http://localhost:8080>. Sans configuration Firebase, l'application 
 | `public/js/app.js` | Logique : saisie, rendu, gestes, partage |
 | `public/js/store.js` | Stockage : local (`localStorage`) ou partagé (Firestore avec cache hors ligne) |
 | `public/js/categories.js` | Rayons et classement automatique des articles |
+| `public/js/parse.js` | Découpage d'une phrase en articles et quantités |
 | `public/sw.js` | Service worker : cache de l'application pour le hors ligne |
 | `public/firebase-config.js` | Votre configuration Firebase |
 | `firestore.rules` | Règles de sécurité de la base |

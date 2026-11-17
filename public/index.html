@@ -42,7 +42,7 @@
     <section class="empty" id="empty" hidden>
       <div class="empty-art">🧺</div>
       <h2>La liste est vide</h2>
-      <p>Ajoutez un article ci-dessous.<br>Astuce : « 2 lait » ou « farine 500g ».</p>
+      <p>Ajoutez des articles ci-dessous, au clavier ou au micro 🎤.<br>Astuce : « 2 lait, farine 500g et des œufs ».</p>
     </section>
   </div>
 
@@ -50,7 +50,10 @@
     <div class="chips" id="chips"></div>
     <div class="composer-row">
       <input id="input" type="text" inputmode="text" enterkeyhint="done"
-             placeholder="Ajouter un article…" aria-label="Ajouter un article" maxlength="80">
+             placeholder="Lait, 2 baguettes…" aria-label="Ajouter un ou plusieurs articles" maxlength="300">
+      <button type="button" class="mic-btn" id="mic" aria-label="Dicter des articles">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
       <button type="submit" class="add-btn" aria-label="Ajouter">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
@@ -97,8 +100,49 @@
           Renseignez la configuration Firebase dans <code>public/firebase-config.js</code> (voir le README) pour synchroniser la liste entre vos téléphones.</p>
       </div>
 
+      <button type="button" class="siri-entry" id="btn-siri">
+        <span class="siri-icon">🎙️</span>
+        <span><strong>Ajouter avec Siri</strong><br><small>« Dis Siri, ajoute aux courses »</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
       <h2>Vous</h2>
       <label class="field"><span>Votre prénom (affiché sur vos ajouts)</span><input id="me-input" maxlength="20" placeholder="ex. Camille"></label>
+
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Feuille de configuration du raccourci Siri -->
+  <dialog class="sheet" id="siri-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Ajouter avec Siri</h2>
+      <p class="muted">Créez une fois ce raccourci dans l'app <strong>Raccourcis</strong> de l'iPhone, puis dites :
+        <em>« Dis Siri, ajoute aux courses »</em>. Siri vous demande quoi ajouter, et les articles arrivent dans la liste partagée.</p>
+
+      <ol class="steps">
+        <li>Ouvrez l'app <strong>Raccourcis</strong>, touchez <strong>+</strong> en haut à droite, puis renommez le raccourci
+          <strong>Ajoute aux courses</strong> (c'est la phrase à dire à Siri).</li>
+        <li>Ajoutez l'action <strong>Demander une entrée</strong>. Type : <em>Texte</em>. Question : <em>Qu'est-ce que j'ajoute ?</em></li>
+        <li>Ajoutez l'action <strong>Texte</strong> et collez-y :
+          <div class="copy-box"><code id="siri-body"></code><button type="button" class="btn" data-copy="siri-body">Copier</button></div>
+          Puis effacez le mot <code>TEXTE</code> (en gardant les guillemets autour) et remplacez-le par la variable
+          <strong>Entrée fournie</strong>, proposée au-dessus du clavier.</li>
+        <li>Ajoutez l'action <strong>Obtenir le contenu de l'URL</strong> et collez cette adresse :
+          <div class="copy-box"><code id="siri-url"></code><button type="button" class="btn" data-copy="siri-url">Copier</button></div>
+          Touchez la flèche ⌄ pour afficher les options :
+          <ul>
+            <li>Méthode : <strong>POST</strong></li>
+            <li>En-têtes : ajoutez <code>Content-Type</code> avec la valeur <code>application/json</code></li>
+            <li>Corps de la requête : <strong>Fichier</strong>, puis choisissez la variable <strong>Texte</strong></li>
+          </ul></li>
+        <li>Facultatif : ajoutez l'action <strong>Énoncer le texte</strong> avec <em>C'est noté</em>.</li>
+      </ol>
+      <p class="muted">Cette adresse contient le code de votre liste : ne la partagez qu'avec votre compagne.
+        Elle peut aussi ouvrir cet écran depuis son téléphone pour créer son raccourci.</p>
 
       <div class="sheet-actions">
         <button type="submit" class="btn primary">Fermer</button>

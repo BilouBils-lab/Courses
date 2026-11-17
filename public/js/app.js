@@ -1,11 +1,13 @@
 import { CATEGORIES, CATEGORY_BY_ID, guessCategory, normalize } from './categories.js';
 import { LocalStore, FirebaseStore } from './store.js';
+import { parseMany, capitalize } from './parse.js';
 import { firebaseConfig } from '../firebase-config.js';
 
 const $ = (sel) => document.querySelector(sel);
 const els = {
   list: $('#list'), empty: $('#empty'), input: $('#input'), composer: $('#composer'), chips: $('#chips'),
   sync: $('#sync'), progressBar: $('#progress-bar'), progressLabel: $('#progress-label'), greeting: $('#greeting'),
+  mic: $('#mic'), siriSheet: $('#siri-sheet'),
   editSheet: $('#edit-sheet'), editForm: $('#edit-form'), editCategory: $('#edit-category'),
   settingsSheet: $('#settings-sheet'), toast: $('#toast'), toastText: $('#toast-text'), toastAction: $('#toast-action'),
 };
@@ -22,6 +24,9 @@ const escapeHtml = (s = '') => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<'
 
 let store;
 let items = [];
+let itemsLoaded = false;
+let inbox = [];
+const handledInbox = new Set();
 let doneOpen = prefs.get('doneOpen', false);
 
 /* ---------------------------------------------------------------- Liste partagée */
@@ -60,21 +65,6 @@ function shareUrl() {
   url.hash = '';
   return url.toString();
 }
-
-/* ---------------------------------------------------------------- Saisie */
-
-// « 2 lait », « lait x2 », « farine 500g », « 1,5 kg pommes »
-function parseInput(text) {
-  const raw = text.trim().replace(/\s+/g, ' ');
-  const unit = '(?:kg|g|gr|l|cl|ml|x|pcs?|paquets?|boites?|bouteilles?)';
-  let m = raw.match(new RegExp(`^(\\d+(?:[.,]\\d+)?\\s?${unit}?)\\s+(?:de |d')?(.+)$`, 'i'));
-  if (m) return { qty: m[1].trim(), name: m[2] };
-  m = raw.match(new RegExp(`^(.+?)\\s+(x\\s?\\d+|\\d+(?:[.,]\\d+)?\\s?${unit}?)$`, 'i'));
-  if (m) return { qty: m[2].replace(/^x\s?/i, '').trim(), name: m[1] };
-  return { qty: '', name: raw };
-}
-
-const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /* ---------------------------------------------------------------- Historique */
 
@@ -119,14 +109,16 @@ function renderChips() {
 
 /* ---------------------------------------------------------------- Actions */
 
-function addItem({ name, qty, category }) {
+// Ajoute un article. `id` permet un identifiant déterministe (phrases Siri traitées
+// par deux téléphones en même temps : pas de doublon). `silent` évite les messages.
+function addItem({ name, qty, category, id, addedBy }, { silent = false } = {}) {
   name = capitalize(name.trim());
   if (!name) return;
   // Si l'article est déjà dans la liste (non coché), on met à jour au lieu de dupliquer.
   const existing = items.find((i) => !i.checked && normalize(i.name) === normalize(name));
   if (existing) {
-    if (qty) store.update(existing.id, { qty, updatedAt: Date.now() });
-    toast(`« ${name} » est déjà dans la liste`);
+    if (qty && qty !== existing.qty) store.update(existing.id, { qty, updatedAt: Date.now() });
+    if (!silent) toast(`« ${name} » est déjà dans la liste`);
     return;
   }
   const checkedTwin = items.find((i) => i.checked && normalize(i.name) === normalize(name));
@@ -137,13 +129,13 @@ function addItem({ name, qty, category }) {
   }
   const knownCategory = history_()[normalize(name)]?.category;
   const item = {
-    id: uid(),
+    id: id || uid(),
     name,
     qty: qty || '',
     note: '',
     category: category || knownCategory || guessCategory(name),
     checked: false,
-    addedBy: prefs.get('me', ''),
+    addedBy: addedBy ?? prefs.get('me', ''),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -398,6 +390,118 @@ function setupSheets() {
   });
 }
 
+/* ---------------------------------------------------------------- Siri (boîte de réception) */
+
+// Le raccourci Siri dépose la phrase dictée dans lists/{code}/inbox.
+// Le premier téléphone qui la voit la transforme en articles puis la supprime.
+function processInbox() {
+  if (!itemsLoaded) return;
+  const added = [];
+  for (const msg of inbox) {
+    if (handledInbox.has(msg.id)) continue;
+    handledInbox.add(msg.id);
+    parseMany(msg.text).forEach((e, i) => {
+      addItem({ ...e, id: `${msg.id}-${i}`, addedBy: 'Siri' }, { silent: true });
+      added.push(e.name);
+    });
+    store.removeInbox(msg.id);
+  }
+  if (added.length) toast(`🎙️ Siri a ajouté : ${added.join(', ')}`);
+}
+
+function siriUrl() {
+  const { projectId, apiKey } = firebaseConfig;
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/lists/${prefs.get('listId')}/inbox?key=${apiKey}`;
+}
+
+const SIRI_BODY = '{"fields":{"text":{"stringValue":"TEXTE"}}}';
+
+function setupSiri() {
+  const btn = $('#btn-siri');
+  if (store.mode !== 'shared') { btn.hidden = true; return; }
+  btn.addEventListener('click', () => {
+    $('#siri-url').textContent = siriUrl();
+    $('#siri-body').textContent = SIRI_BODY;
+    els.settingsSheet.close();
+    els.siriSheet.showModal();
+  });
+  els.siriSheet.addEventListener('click', async (e) => {
+    if (e.target === els.siriSheet) { els.siriSheet.close(); return; }
+    const target = e.target.closest('[data-copy]');
+    if (!target) return;
+    const text = $(`#${target.dataset.copy}`).textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Copié ✔');
+    } catch {
+      // Repli : sélection du texte pour copie manuelle.
+      const range = document.createRange();
+      range.selectNodeContents($(`#${target.dataset.copy}`));
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      toast('Sélectionné : utilisez « Copier »');
+    }
+  });
+}
+
+/* ---------------------------------------------------------------- Micro */
+
+function setupMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { els.mic.hidden = true; return; }
+  let rec = null;
+  let finalText = '';
+
+  const stop = () => { rec?.stop(); };
+
+  els.mic.addEventListener('click', () => {
+    if (rec) { stop(); return; }
+    rec = new SR();
+    rec.lang = 'fr-FR';
+    rec.interimResults = true;
+    rec.continuous = false;
+    finalText = '';
+    const placeholder = els.input.placeholder;
+
+    rec.onstart = () => {
+      els.mic.classList.add('listening');
+      els.input.placeholder = 'Je vous écoute… « du lait et des œufs »';
+      navigator.vibrate?.(15);
+    };
+    rec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+      }
+      els.input.value = (finalText + interim).trim();
+    };
+    rec.onerror = (e) => {
+      const messages = {
+        'not-allowed': 'Autorisez le micro pour cette app dans les réglages',
+        'service-not-allowed': 'Reconnaissance vocale non autorisée sur cet appareil',
+        network: 'La reconnaissance vocale a besoin du réseau',
+        'no-speech': 'Je n\'ai rien entendu',
+        'audio-capture': 'Micro introuvable',
+      };
+      if (e.error !== 'aborted') toast(messages[e.error] || 'Reconnaissance vocale indisponible');
+    };
+    rec.onend = () => {
+      els.mic.classList.remove('listening');
+      els.input.placeholder = placeholder;
+      rec = null;
+      const text = (finalText || els.input.value).trim();
+      if (!text) return;
+      const entries = parseMany(text);
+      entries.forEach((entry) => addItem(entry, { silent: true }));
+      els.input.value = '';
+      renderChips();
+      if (entries.length) toast(`🎙️ Ajouté : ${entries.map((x) => x.name).join(', ')}`);
+    };
+    try { rec.start(); } catch { rec = null; toast('Reconnaissance vocale indisponible'); }
+  });
+}
+
 /* ---------------------------------------------------------------- Divers */
 
 let toastTimer;
@@ -457,7 +561,9 @@ async function main() {
     e.preventDefault();
     const value = els.input.value.trim();
     if (!value) return;
-    addItem(parseInput(value));
+    const entries = parseMany(value);
+    entries.forEach((e) => addItem(e, { silent: entries.length > 1 }));
+    if (entries.length > 1) toast(`${entries.length} articles ajoutés`);
     els.input.value = '';
     renderChips();
   });
@@ -466,9 +572,12 @@ async function main() {
   render();
   renderChips();
   store.subscribe(
-    (next) => { items = next; render(); renderChips(); },
+    (next) => { items = next; itemsLoaded = true; render(); renderChips(); processInbox(); },
     setSync,
   );
+  store.subscribeInbox((messages) => { inbox = messages; processInbox(); });
+  setupMic();
+  setupSiri();
 
   if (joined) toast('Vous avez rejoint la liste partagée 🎉');
 

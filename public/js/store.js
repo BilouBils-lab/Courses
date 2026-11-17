@@ -4,7 +4,8 @@
 //    (IndexedDB) et file d'attente des modifications faites sans réseau.
 //
 // Interface : subscribe(onItems, onStatus), add(item), update(id, patch),
-//             remove(id), removeMany(ids), mode
+//             remove(id), removeMany(ids), mode,
+//             subscribeInbox(onMessages), removeInbox(id)  (phrases envoyées par Siri)
 
 const FIREBASE_VERSION = '11.0.2';
 const FB = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
@@ -58,6 +59,10 @@ export class LocalStore {
     this.#save();
   }
 
+  subscribeInbox() { /* pas de boîte de réception sans Firebase */ }
+
+  removeInbox() {}
+
   removeMany(ids) {
     const set = new Set(ids);
     this.items = this.items.filter((it) => !set.has(it.id));
@@ -87,6 +92,8 @@ export class FirebaseStore {
       localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() }),
     });
     this.col = fsMod.collection(this.db, 'lists', listId, 'items');
+    // Boîte de réception : phrases envoyées par le raccourci Siri, à transformer en articles.
+    this.inbox = fsMod.collection(this.db, 'lists', listId, 'inbox');
 
     // Authentification anonyme (exigée par les règles de sécurité).
     // La session est conservée sur l'appareil, donc pas besoin de réseau ensuite.
@@ -128,6 +135,19 @@ export class FirebaseStore {
         onStatus('error', err);
       },
     );
+  }
+
+  async subscribeInbox(onMessages) {
+    await this.authReady;
+    this.fs.onSnapshot(
+      this.inbox,
+      (snap) => onMessages(snap.docs.map((d) => ({ id: d.id, text: String(d.data().text || '') }))),
+      (err) => console.error('Boîte de réception', err),
+    );
+  }
+
+  removeInbox(id) {
+    this.#fire(this.fs.deleteDoc(this.fs.doc(this.inbox, id)));
   }
 
   // Les promesses Firestore ne se résolvent qu'après accusé de réception du

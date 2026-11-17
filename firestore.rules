@@ -18,5 +18,19 @@ service cloud.firestore {
 
       allow delete: if request.auth != null;
     }
+
+    // Boîte de réception du raccourci Siri : le raccourci y dépose la phrase dictée
+    // (sans connexion, il ne connaît que le code de la liste) ; l'application la
+    // transforme en articles puis la supprime.
+    match /lists/{listId}/inbox/{msgId} {
+      allow create: if listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
+        && request.resource.data.keys().hasOnly(['text'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 500;
+
+      allow get, list, delete: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$');
+    }
   }
 }
