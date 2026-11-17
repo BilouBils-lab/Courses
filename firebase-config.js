@@ -16,4 +16,11 @@
 //   appId: '1:1234567890:web:abcdef',
 // };
 
-export const firebaseConfig = null;
+export const firebaseConfig = {
+  apiKey: 'AIzaSyCVuq0kX83WnE1XuMTfImRSyXwU8IeqMnE',
+  authDomain: 'courses-maison-92ebb.firebaseapp.com',
+  projectId: 'courses-maison-92ebb',
+  storageBucket: 'courses-maison-92ebb.firebasestorage.app',
+  messagingSenderId: '267701933118',
+  appId: '1:267701933118:web:75b9a3186d3ac5ea65ad6f',
+};

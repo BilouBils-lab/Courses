@@ -1,6 +1,6 @@
 // Service worker : met l'application en cache pour un fonctionnement hors ligne.
 // Pensez à incrémenter VERSION à chaque mise en ligne d'une nouvelle version.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `courses-${VERSION}`;
 const APP_SHELL = [
   './',

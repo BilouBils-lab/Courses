@@ -47,7 +47,7 @@ firebase login
 ```
 
 ```bash
-firebase deploy --project VOTRE_ID_DE_PROJET
+firebase deploy
 ```
 
 L'adresse est affichée à la fin, du type `https://votre-projet.web.app`. Cette commande publie aussi les règles Firestore.
