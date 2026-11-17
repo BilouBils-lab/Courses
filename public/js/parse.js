@@ -126,11 +126,21 @@ function splitOnKnownProducts(chunk) {
 
 // Formules à ignorer en début de phrase (« il faut du pain », « je voudrais du lait »).
 const FILLER = /^(?:(?:alors|bon|euh|aussi|et|puis|ok|stp|s'il te plaît|s’il te plaît)\s+)*(?:(?:il (?:me |nous )?faut|je (?:veux|voudrais)|on (?:veut|voudrait)|(?:j'ai|j’ai|on a) besoin(?: de| d['’])?|ajoute|ajouter|rajoute|rajouter|achète|acheter|prends|prendre|penser? à|n['’]oublie pas)\s*)+/i;
-const stripFiller = (chunk) => chunk.replace(FILLER, '').trim();
+const stripFiller = (chunk) => chunk.trim().replace(FILLER, '').trim();
 
 // Plusieurs articles séparés par des virgules, « et », « puis », des articles, des nombres…
+// Restes de la commande vocale dictés avec les articles :
+// « Dis Siri, ajoute du lait aux courses » → « du lait ».
+const VOICE_COMMAND = [
+  /\b(?:dis|hey|eh|ok|okay)\s+siri\b[\s,]*/gi,
+  /\bsiri\b[\s,]*/gi,
+  // (\b ne fonctionne pas devant « à » : on utilise un espace ou le début du texte)
+  /(?:^|\s)(?:aux|à mes|à nos|à ma|à la|dans la|dans ma|sur la|sur ma|pour les)\s+(?:courses|liste(?:\s+(?:de|des)\s+courses)?)(?=$|[\s,.!?])/gi,
+];
+const stripVoiceCommand = (text) => VOICE_COMMAND.reduce((t, re) => t.replace(re, ' '), text).trim();
+
 export function parseMany(text, { voice = false } = {}) {
-  return text
+  return stripVoiceCommand(text)
     .replace(/[.!?]+/g, ',')
     .split(/\s*(?:,|;|\n|\bet puis\b|\bpuis\b|\bet\b|\bavec\b)\s*/i)
     .map(stripFiller)
