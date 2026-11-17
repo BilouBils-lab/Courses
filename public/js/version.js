@@ -1,4 +1,4 @@
 // Numéro de version affiché dans l'application (👥 › bas de l'écran).
 // À chaque mise en ligne : incrémenter ici ET la constante VERSION de sw.js (même valeur).
-export const APP_VERSION = '1.8';
+export const APP_VERSION = '1.9';
 export const APP_DATE = '17 novembre 2026';

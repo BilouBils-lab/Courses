@@ -475,21 +475,62 @@ function setupMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!els.mic) return;
   if (!SR) { els.mic.hidden = true; return; }
-  let rec = null;
-  let finalText = '';
 
-  const stop = () => { rec?.stop(); };
+  const placeholder = els.input.placeholder;
+  const SILENCE_MS = 1800; // fin automatique après ce silence (Safari ne signale pas toujours la fin)
+  const START_MS = 4000;   // le micro doit démarrer dans ce délai
+  const MAX_MS = 20000;    // durée maximale d'une écoute
+  const ERRORS = {
+    'not-allowed': 'Autorisez le micro pour cette app dans les réglages',
+    'service-not-allowed': 'Reconnaissance vocale non autorisée sur cet appareil',
+    network: 'La reconnaissance vocale a besoin du réseau',
+    'no-speech': 'Je n\'ai rien entendu',
+    'audio-capture': 'Micro introuvable',
+  };
 
-  els.mic.addEventListener('click', () => {
-    if (rec) { stop(); return; }
-    rec = new SR();
+  // Une « session » par appui : l'état ne dépend jamais d'un événement que
+  // Safari pourrait oublier d'envoyer (onend notamment).
+  let current = null;
+
+  function finish(session, { keep = true, message = '' } = {}) {
+    if (session.done) return;
+    session.done = true;
+    clearTimeout(session.silenceTimer);
+    clearTimeout(session.startTimer);
+    clearTimeout(session.maxTimer);
+    // abort() libère le micro tout de suite, sinon Safari peut le garder bloqué.
+    try { session.rec.abort(); } catch { /* déjà terminé */ }
+    if (current === session) current = null;
+    els.mic.classList.remove('listening');
+    els.input.placeholder = placeholder;
+
+    const text = keep ? [session.finalText, session.interim].filter(Boolean).join(', ').trim() : '';
+    els.input.value = '';
+    if (text) {
+      const entries = parseMany(text, { voice: true });
+      entries.forEach((entry) => addItem(entry, { silent: true }));
+      renderChips();
+      if (entries.length) { toast(`🎙️ Ajouté : ${entries.map((x) => x.name).join(', ')}`); return; }
+    }
+    if (message) toast(message);
+  }
+
+  function begin() {
+    const session = { rec: new SR(), finalText: '', interim: '', done: false, started: false };
+    current = session;
+    const { rec } = session;
     rec.lang = 'fr-FR';
     rec.interimResults = true;
     rec.continuous = false;
-    finalText = '';
-    const placeholder = els.input.placeholder;
+
+    const armSilence = () => {
+      clearTimeout(session.silenceTimer);
+      session.silenceTimer = setTimeout(() => finish(session), SILENCE_MS);
+    };
 
     rec.onstart = () => {
+      session.started = true;
+      clearTimeout(session.startTimer);
       els.mic.classList.add('listening');
       els.input.placeholder = 'Je vous écoute… « du lait et des œufs »';
       navigator.vibrate?.(15);
@@ -498,35 +539,42 @@ function setupMic() {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        // Chaque segment final correspond en général à une pause : on le traite comme un article à part.
-        if (r.isFinal) finalText += (finalText ? ', ' : '') + r[0].transcript.trim();
+        // Chaque segment final correspond en général à une pause : un article à part.
+        if (r.isFinal) session.finalText += (session.finalText ? ', ' : '') + r[0].transcript.trim();
         else interim += r[0].transcript;
       }
-      els.input.value = [finalText, interim.trim()].filter(Boolean).join(', ');
+      session.interim = interim.trim();
+      els.input.value = [session.finalText, session.interim].filter(Boolean).join(', ');
+      armSilence();
     };
+    rec.onspeechend = () => armSilence();
     rec.onerror = (e) => {
-      const messages = {
-        'not-allowed': 'Autorisez le micro pour cette app dans les réglages',
-        'service-not-allowed': 'Reconnaissance vocale non autorisée sur cet appareil',
-        network: 'La reconnaissance vocale a besoin du réseau',
-        'no-speech': 'Je n\'ai rien entendu',
-        'audio-capture': 'Micro introuvable',
-      };
-      if (e.error !== 'aborted') toast(messages[e.error] || 'Reconnaissance vocale indisponible');
+      if (e.error === 'aborted') return;
+      finish(session, { message: ERRORS[e.error] || 'Reconnaissance vocale indisponible' });
     };
-    rec.onend = () => {
-      els.mic.classList.remove('listening');
-      els.input.placeholder = placeholder;
-      rec = null;
-      const text = (finalText || els.input.value).trim();
-      if (!text) return;
-      const entries = parseMany(text, { voice: true });
-      entries.forEach((entry) => addItem(entry, { silent: true }));
-      els.input.value = '';
-      renderChips();
-      if (entries.length) toast(`🎙️ Ajouté : ${entries.map((x) => x.name).join(', ')}`);
-    };
-    try { rec.start(); } catch { rec = null; toast('Reconnaissance vocale indisponible'); }
+    rec.onend = () => finish(session);
+
+    session.startTimer = setTimeout(() => {
+      if (!session.started) finish(session, { keep: false, message: 'Le micro ne répond pas, touchez 🎤 pour réessayer' });
+    }, START_MS);
+    session.maxTimer = setTimeout(() => finish(session), MAX_MS);
+
+    try {
+      rec.start();
+    } catch {
+      finish(session, { keep: false, message: 'Reconnaissance vocale indisponible' });
+    }
+  }
+
+  els.mic.addEventListener('click', () => {
+    if (current?.started) {
+      // Appui pendant l'écoute : on termine et on ajoute ce qui a été entendu.
+      finish(current);
+      return;
+    }
+    // Écoute bloquée sans avoir démarré : on l'abandonne et on repart à zéro.
+    if (current) finish(current, { keep: false });
+    begin();
   });
 }
 
