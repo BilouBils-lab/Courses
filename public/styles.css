@@ -367,6 +367,8 @@ button:focus:not(:focus-visible) { outline: none; }
 .sheet[open] { animation: sheet-in .3s cubic-bezier(.2, .8, .2, 1); }
 @keyframes sheet-in { from { transform: translateY(40px); opacity: 0; } }
 .sheet::backdrop { background: var(--backdrop); backdrop-filter: blur(4px); }
+/* Poignée plus visible : invite à tirer la fenêtre vers le bas pour la fermer. */
+.sheet-handle { cursor: grab; }
 /* Page du dessous bloquée tant qu'un écran est ouvert (fiable aussi sur iPhone). */
 body.locked { position: fixed; left: 0; right: 0; overflow: hidden; }
 .sheet-body { padding: 10px 20px calc(20px + var(--safe-b)); }

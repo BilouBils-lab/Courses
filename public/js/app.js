@@ -410,6 +410,72 @@ function unlockIfNoSheet() {
 }
 document.querySelectorAll('dialog.sheet').forEach((d) => d.addEventListener('close', unlockIfNoSheet));
 
+// Glisser vers le bas pour fermer une fenêtre (geste habituel sur iPhone).
+// Ne s'active que si la fenêtre est tout en haut de son défilement.
+function setupSheetDrag(sheet) {
+  let startY = 0;
+  let dy = 0;
+  let samples = []; // dernières positions, pour mesurer la vitesse en fin de geste
+  let dragging = false;
+  let armed = false;
+
+  const reset = () => {
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+  };
+
+  sheet.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    // Pas de glisser depuis un champ de saisie ou une liste qui défile horizontalement.
+    if (e.target.closest('input, textarea, select, .voice-log')) { armed = false; return; }
+    armed = sheet.scrollTop <= 0;
+    dragging = false;
+    dy = 0;
+    startY = e.touches[0].clientY;
+    samples = [];
+  }, { passive: true });
+
+  sheet.addEventListener('touchmove', (e) => {
+    if (!armed) return;
+    dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (dy < 6 || sheet.scrollTop > 0) { if (dy < 0) armed = false; return; }
+      dragging = true;
+      sheet.style.transition = 'none';
+      startY = e.touches[0].clientY; // évite un saut au début du geste
+      dy = 0;
+    }
+    e.preventDefault(); // la fenêtre suit le doigt au lieu de défiler
+    samples.push({ y: dy, t: e.timeStamp });
+    samples = samples.filter((sm) => e.timeStamp - sm.t < 120);
+    sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
+  }, { passive: false });
+
+  const end = (e) => {
+    if (!dragging) { armed = false; return; }
+    dragging = false;
+    armed = false;
+    // Vitesse sur les ~120 dernières ms (px/ms) : un « coup » rapide vers le bas ferme.
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const velocity = first && last && last.t > first.t ? (last.y - first.y) / (last.t - first.t) : 0;
+    const closeIt = dy > 120 || (dy > 30 && velocity > 0.45);
+    sheet.style.transition = 'transform .22s cubic-bezier(.2, .8, .2, 1)';
+    if (closeIt) {
+      sheet.style.transform = 'translateY(105%)';
+      setTimeout(() => { sheet.close(); reset(); }, 200);
+      navigator.vibrate?.(8);
+    } else {
+      sheet.style.transform = '';
+      setTimeout(reset, 230);
+    }
+  };
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+  sheet.addEventListener('close', reset);
+}
+document.querySelectorAll('dialog.sheet').forEach(setupSheetDrag);
+
 let editing = null;
 
 function openEdit(item) {
