@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Courses</title>
+  <meta name="description" content="Liste de courses partagée, utilisable hors ligne.">
+  <meta name="theme-color" content="#f4f6f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1412" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Courses">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-row">
+        <div>
+          <p class="eyebrow" id="greeting">Bonjour</p>
+          <h1>Courses</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="sync" id="sync" data-state="local" title="État de la synchronisation">
+            <span class="sync-dot"></span><span class="sync-label">Local</span>
+          </span>
+          <button class="icon-btn" id="btn-settings" aria-label="Partage et réglages">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4M2 21v-1a6 6 0 0 1 6-6h0a6 6 0 0 1 6 6v1M8 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 14a5 5 0 0 1 4 5v2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="progress" aria-hidden="true"><div class="progress-bar" id="progress-bar"></div></div>
+      <p class="progress-label" id="progress-label"></p>
+    </header>
+
+    <main id="list" class="list" aria-live="polite"></main>
+
+    <section class="empty" id="empty" hidden>
+      <div class="empty-art">🧺</div>
+      <h2>La liste est vide</h2>
+      <p>Ajoutez un article ci-dessous.<br>Astuce : « 2 lait » ou « farine 500g ».</p>
+    </section>
+  </div>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <div class="chips" id="chips"></div>
+    <div class="composer-row">
+      <input id="input" type="text" inputmode="text" enterkeyhint="done"
+             placeholder="Ajouter un article…" aria-label="Ajouter un article" maxlength="80">
+      <button type="submit" class="add-btn" aria-label="Ajouter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  </form>
+
+  <!-- Feuille d'édition d'un article -->
+  <dialog class="sheet" id="edit-sheet">
+    <form method="dialog" class="sheet-body" id="edit-form">
+      <div class="sheet-handle"></div>
+      <h2>Modifier l'article</h2>
+      <label class="field"><span>Article</span><input name="name" required maxlength="80"></label>
+      <label class="field"><span>Quantité</span><input name="qty" maxlength="20" placeholder="ex. 2, 500 g, 1 L"></label>
+      <label class="field"><span>Rayon</span><select name="category" id="edit-category"></select></label>
+      <label class="field"><span>Note</span><input name="note" maxlength="120" placeholder="ex. la marque bio"></label>
+      <div class="sheet-actions">
+        <button type="button" class="btn danger" id="edit-delete">Supprimer</button>
+        <button type="submit" class="btn primary" value="save" autofocus>Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Feuille de partage et réglages -->
+  <dialog class="sheet" id="settings-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Partage</h2>
+      <div id="share-on">
+        <p class="muted">Envoyez ce lien à la personne qui partage la liste avec vous. Vous verrez tous les deux la même liste, en temps réel.</p>
+        <div class="share-box">
+          <code id="share-code"></code>
+          <button type="button" class="btn" id="btn-share">Partager le lien</button>
+        </div>
+        <details class="join">
+          <summary>Rejoindre une autre liste</summary>
+          <div class="join-row">
+            <input id="join-input" placeholder="Code ou lien de la liste">
+            <button type="button" class="btn" id="btn-join">Rejoindre</button>
+          </div>
+        </details>
+      </div>
+      <div id="share-off" hidden>
+        <p class="muted">Le partage n'est pas encore activé : la liste est enregistrée uniquement sur cet appareil.
+          Renseignez la configuration Firebase dans <code>firebase-config.js</code> (voir le README) pour synchroniser la liste entre vos téléphones.</p>
+      </div>
+
+      <h2>Vous</h2>
+      <label class="field"><span>Votre prénom (affiché sur vos ajouts)</span><input id="me-input" maxlength="20" placeholder="ex. Camille"></label>
+
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="toast-action"></button>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
