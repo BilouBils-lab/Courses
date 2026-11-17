@@ -316,6 +316,29 @@ function setupGestures() {
 
 /* ---------------------------------------------------------------- Feuilles */
 
+// Bloque le défilement de la page du dessous pendant qu'un écran est ouvert.
+let lockedScrollY = 0;
+function openSheet(sheet) {
+  if (!document.body.classList.contains('locked')) {
+    lockedScrollY = window.scrollY;
+    document.body.style.top = `-${lockedScrollY}px`;
+    document.body.classList.add('locked');
+  }
+  sheet.showModal();
+  sheet.scrollTop = 0;
+}
+
+function unlockIfNoSheet() {
+  // Laisse le temps à un éventuel écran suivant de s'ouvrir (Partage › Siri).
+  setTimeout(() => {
+    if (document.querySelector('dialog[open]') || !document.body.classList.contains('locked')) return;
+    document.body.classList.remove('locked');
+    document.body.style.top = '';
+    window.scrollTo(0, lockedScrollY);
+  }, 0);
+}
+document.querySelectorAll('dialog.sheet').forEach((d) => d.addEventListener('close', unlockIfNoSheet));
+
 let editing = null;
 
 function openEdit(item) {
@@ -325,7 +348,7 @@ function openEdit(item) {
   f.qty.value = item.qty || '';
   f.note.value = item.note || '';
   f.category.value = CATEGORY_BY_ID[item.category] ? item.category : 'autre';
-  els.editSheet.showModal();
+  openSheet(els.editSheet);
 }
 
 function setupSheets() {
@@ -363,7 +386,7 @@ function setupSheets() {
     $('#share-off').hidden = shared;
     $('#share-code').textContent = prefs.get('listId');
     $('#me-input').value = prefs.get('me', '');
-    els.settingsSheet.showModal();
+    openSheet(els.settingsSheet);
   });
 
   $('#me-input').addEventListener('change', (e) => {
@@ -424,7 +447,7 @@ function setupSiri() {
     $('#siri-url').textContent = siriUrl();
     $('#siri-body').textContent = SIRI_BODY;
     els.settingsSheet.close();
-    els.siriSheet.showModal();
+    openSheet(els.siriSheet);
   });
   els.siriSheet.addEventListener('click', async (e) => {
     if (e.target === els.siriSheet) { els.siriSheet.close(); return; }
@@ -584,7 +607,7 @@ async function main() {
 
   if (joined) toast('Vous avez rejoint la liste partagée 🎉');
 
-  $('#version').textContent = `Courses · version ${APP_VERSION} du ${APP_DATE}`;
+  $('#version').textContent = `Version ${APP_VERSION} · ${APP_DATE}`;
 
   if ('serviceWorker' in navigator) {
     // Une nouvelle version a été installée en arrière-plan : proposer de recharger.
