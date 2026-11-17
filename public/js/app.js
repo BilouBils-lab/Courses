@@ -442,6 +442,7 @@ const SIRI_BODY = '{"fields":{"text":{"stringValue":"TEXTE"}}}';
 
 function setupSiri() {
   const btn = $('#btn-siri');
+  if (!btn || !els.siriSheet) return;
   if (store.mode !== 'shared') { btn.hidden = true; return; }
   btn.addEventListener('click', () => {
     $('#siri-url').textContent = siriUrl();
@@ -472,6 +473,7 @@ function setupSiri() {
 
 function setupMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!els.mic) return;
   if (!SR) { els.mic.hidden = true; return; }
   let rec = null;
   let finalText = '';
@@ -562,9 +564,47 @@ function updateGreeting() {
   els.greeting.textContent = me ? `${hello} ${me}` : hello;
 }
 
+/* ---------------------------------------------------------------- Mises à jour */
+
+// Enregistré dès le démarrage, avant tout le reste : même si une autre partie de
+// l'app plantait, les mises à jour continueraient d'arriver.
+function setupUpdates() {
+  if ('serviceWorker' in navigator) {
+    // Une nouvelle version a été installée en arrière-plan : proposer de recharger.
+    // (Pas de message lors de la toute première installation.)
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) toast('✨ Nouvelle version disponible', 'Recharger', () => location.reload(), 20000);
+    });
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => {
+        // Sur iPhone, l'app installée reste souvent ouverte en arrière-plan :
+        // on vérifie les mises à jour à chaque retour au premier plan.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        });
+      })
+      .catch((err) => console.warn('Service worker', err));
+  }
+}
+
+function showVersion() {
+  let el = $('#version');
+  if (!el) {
+    // Page plus ancienne que les scripts (cache) : on crée l'emplacement.
+    el = document.createElement('p');
+    el.id = 'version';
+    el.className = 'version';
+    els.settingsSheet?.querySelector('.sheet-body')?.prepend(el);
+  }
+  if (el) el.textContent = `Version ${APP_VERSION} · ${APP_DATE}`;
+}
+
 /* ---------------------------------------------------------------- Démarrage */
 
 async function main() {
+  setupUpdates();
+  showVersion();
   const { joined } = resolveListId();
 
   if (firebaseConfig) {
@@ -607,25 +647,6 @@ async function main() {
 
   if (joined) toast('Vous avez rejoint la liste partagée 🎉');
 
-  $('#version').textContent = `Version ${APP_VERSION} · ${APP_DATE}`;
-
-  if ('serviceWorker' in navigator) {
-    // Une nouvelle version a été installée en arrière-plan : proposer de recharger.
-    // (Pas de message lors de la toute première installation.)
-    const hadController = Boolean(navigator.serviceWorker.controller);
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (hadController) toast('✨ Nouvelle version disponible', 'Recharger', () => location.reload(), 20000);
-    });
-    navigator.serviceWorker.register('sw.js')
-      .then((reg) => {
-        // Sur iPhone, l'app installée reste souvent ouverte en arrière-plan :
-        // on vérifie les mises à jour à chaque retour au premier plan.
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') reg.update().catch(() => {});
-        });
-      })
-      .catch((err) => console.warn('Service worker', err));
-  }
 }
 
 main();

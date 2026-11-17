@@ -1,7 +1,7 @@
 // Service worker : met l'application en cache pour un fonctionnement hors ligne.
 // À chaque mise en ligne : incrémenter VERSION, avec la même valeur que APP_VERSION
 // dans js/version.js (numéro affiché dans l'application).
-const VERSION = '1.7';
+const VERSION = '1.8';
 const CACHE = `courses-${VERSION}`;
 const APP_SHELL = [
   './',
@@ -69,7 +69,8 @@ async function networkFirst(request, url) {
   try {
     // En magasin le réseau est souvent très lent : on n'attend pas plus de 2,5 s.
     const response = await Promise.race([
-      fetch(request),
+      // cache: 'no-cache' : toujours demander au serveur la dernière version.
+      fetch(new Request(request, { cache: 'no-cache' })),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500)),
     ]);
     if (response.ok && url.pathname.indexOf('/__') !== 0) cache.put(request, response.clone());
