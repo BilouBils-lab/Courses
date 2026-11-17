@@ -400,7 +400,7 @@ function processInbox() {
   for (const msg of inbox) {
     if (handledInbox.has(msg.id)) continue;
     handledInbox.add(msg.id);
-    parseMany(msg.text).forEach((e, i) => {
+    parseMany(msg.text, { voice: true }).forEach((e, i) => {
       addItem({ ...e, id: `${msg.id}-${i}`, addedBy: 'Siri' }, { silent: true });
       added.push(e.name);
     });
@@ -472,9 +472,11 @@ function setupMic() {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+        // Chaque segment final correspond en général à une pause : on le traite comme un article à part.
+        if (r.isFinal) finalText += (finalText ? ', ' : '') + r[0].transcript.trim();
+        else interim += r[0].transcript;
       }
-      els.input.value = (finalText + interim).trim();
+      els.input.value = [finalText, interim.trim()].filter(Boolean).join(', ');
     };
     rec.onerror = (e) => {
       const messages = {
@@ -492,7 +494,7 @@ function setupMic() {
       rec = null;
       const text = (finalText || els.input.value).trim();
       if (!text) return;
-      const entries = parseMany(text);
+      const entries = parseMany(text, { voice: true });
       entries.forEach((entry) => addItem(entry, { silent: true }));
       els.input.value = '';
       renderChips();
