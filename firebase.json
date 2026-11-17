@@ -3,11 +3,30 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "public": ".",
-    "ignore": ["firebase.json", "firestore.rules", "README.md", ".github/**", "**/.*"],
+    "public": "public",
+    "ignore": [
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "headers": [
-      { "source": "sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-      { "source": "**/*.@(js|css|html|webmanifest)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+      {
+        "source": "sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css|html|webmanifest)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
     ]
   }
 }

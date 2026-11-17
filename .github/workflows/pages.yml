@@ -23,11 +23,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Préparer le site
-        run: |
-          mkdir _site
-          cp -r index.html styles.css manifest.webmanifest sw.js firebase-config.js js icons _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
       - id: deployment
         uses: actions/deploy-pages@v4

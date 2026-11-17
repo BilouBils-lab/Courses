@@ -28,7 +28,7 @@ La pastille en haut indique l'état : **Synchronisé**, **Envoi…**, **Hors lig
 3. **Firestore Database** › Créer une base de données › choisissez une région en Europe (ex. `europe-west9` Paris) › mode production.
 4. Onglet **Règles** de Firestore : collez le contenu de [`firestore.rules`](firestore.rules) puis **Publier**.
 5. ⚙️ **Paramètres du projet** › Vos applications › icône **Web** `</>` › enregistrez l'application. Copiez l'objet `firebaseConfig` affiché.
-6. Collez-le dans [`firebase-config.js`](firebase-config.js) à la place de `null`.
+6. Collez-le dans [`public/firebase-config.js`](public/firebase-config.js) à la place de `null`.
 
 > Ces clés ne sont pas secrètes, elles peuvent être publiées. La sécurité est assurée par les règles Firestore : seule une personne qui connaît le code de la liste (aléatoire, 16 caractères) peut la lire ou la modifier.
 
@@ -72,19 +72,19 @@ Ouvrez l'application au moins une fois avec du réseau sur chaque téléphone : 
 Aucune étape de compilation : HTML, CSS et JavaScript (modules ES) uniquement.
 
 ```bash
-python3 -m http.server 8080
+python3 -m http.server 8080 --directory public
 ```
 
 Puis ouvrez <http://localhost:8080>. Sans configuration Firebase, l'application fonctionne en mode **local**, avec la liste enregistrée sur l'appareil uniquement.
 
 | Fichier | Rôle |
 |---|---|
-| `index.html`, `styles.css` | Interface |
-| `js/app.js` | Logique : saisie, rendu, gestes, partage |
-| `js/store.js` | Stockage : local (`localStorage`) ou partagé (Firestore avec cache hors ligne) |
-| `js/categories.js` | Rayons et classement automatique des articles |
-| `sw.js` | Service worker : cache de l'application pour le hors ligne |
-| `firebase-config.js` | Votre configuration Firebase |
+| `public/index.html`, `public/styles.css` | Interface |
+| `public/js/app.js` | Logique : saisie, rendu, gestes, partage |
+| `public/js/store.js` | Stockage : local (`localStorage`) ou partagé (Firestore avec cache hors ligne) |
+| `public/js/categories.js` | Rayons et classement automatique des articles |
+| `public/sw.js` | Service worker : cache de l'application pour le hors ligne |
+| `public/firebase-config.js` | Votre configuration Firebase |
 | `firestore.rules` | Règles de sécurité de la base |
 
-**Après chaque modification**, incrémentez `VERSION` dans `sw.js` (`v1` › `v2`…) pour que les téléphones récupèrent la nouvelle version.
+**Après chaque modification**, incrémentez `VERSION` dans `public/sw.js` (`v1` › `v2`…) pour que les téléphones récupèrent la nouvelle version.
