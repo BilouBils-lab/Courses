@@ -1,6 +1,7 @@
 // Service worker : met l'application en cache pour un fonctionnement hors ligne.
-// Pensez à incrémenter VERSION à chaque mise en ligne d'une nouvelle version.
-const VERSION = 'v5';
+// À chaque mise en ligne : incrémenter VERSION, avec la même valeur que APP_VERSION
+// dans js/version.js (numéro affiché dans l'application).
+const VERSION = '1.6';
 const CACHE = `courses-${VERSION}`;
 const APP_SHELL = [
   './',
@@ -12,6 +13,7 @@ const APP_SHELL = [
   'js/store.js',
   'js/categories.js',
   'js/parse.js',
+  'js/version.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',

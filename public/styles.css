@@ -287,6 +287,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .copy-box code { flex: 1; min-width: 0; font-size: 12px; word-break: break-all; color: var(--text); }
 .copy-box .btn { flex: none; padding: 8px 12px; font-size: 14px; }
 
+.version { text-align: center; color: var(--muted); font-size: 13px; margin: 16px 0 0; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: calc(140px + var(--safe-b)); z-index: 20;

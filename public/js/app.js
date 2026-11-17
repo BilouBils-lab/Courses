@@ -1,6 +1,7 @@
 import { CATEGORIES, CATEGORY_BY_ID, guessCategory, normalize } from './categories.js';
 import { LocalStore, FirebaseStore } from './store.js';
 import { parseMany, capitalize } from './parse.js';
+import { APP_VERSION, APP_DATE } from './version.js';
 import { firebaseConfig } from '../firebase-config.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -507,13 +508,13 @@ function setupMic() {
 /* ---------------------------------------------------------------- Divers */
 
 let toastTimer;
-function toast(text, actionLabel = '', action = null) {
+function toast(text, actionLabel = '', action = null, duration = 4000) {
   els.toastText.textContent = text;
   els.toastAction.textContent = actionLabel;
   els.toastAction.onclick = () => { action?.(); els.toast.hidden = true; };
   els.toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { els.toast.hidden = true; }, 4000);
+  toastTimer = setTimeout(() => { els.toast.hidden = true; }, duration);
 }
 
 const SYNC_LABELS = {
@@ -583,8 +584,24 @@ async function main() {
 
   if (joined) toast('Vous avez rejoint la liste partagée 🎉');
 
+  $('#version').textContent = `Courses · version ${APP_VERSION} du ${APP_DATE}`;
+
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker', err));
+    // Une nouvelle version a été installée en arrière-plan : proposer de recharger.
+    // (Pas de message lors de la toute première installation.)
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) toast('✨ Nouvelle version disponible', 'Recharger', () => location.reload(), 20000);
+    });
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => {
+        // Sur iPhone, l'app installée reste souvent ouverte en arrière-plan :
+        // on vérifie les mises à jour à chaque retour au premier plan.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        });
+      })
+      .catch((err) => console.warn('Service worker', err));
   }
 }
 

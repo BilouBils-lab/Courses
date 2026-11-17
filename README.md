@@ -97,4 +97,4 @@ Puis ouvrez <http://localhost:8080>. Sans configuration Firebase, l'application 
 | `public/firebase-config.js` | Votre configuration Firebase |
 | `firestore.rules` | Règles de sécurité de la base |
 
-**Après chaque modification**, incrémentez `VERSION` dans `public/sw.js` (`v1` › `v2`…) pour que les téléphones récupèrent la nouvelle version.
+**Après chaque modification**, incrémentez le numéro de version dans `public/js/version.js` **et** `public/sw.js` (même valeur, ex. `1.6` › `1.7`). Les téléphones affichent alors « Nouvelle version disponible » et le numéro est visible en bas de l’écran 👥.
