@@ -7,7 +7,8 @@ import { firebaseConfig } from '../firebase-config.js';
 const $ = (sel) => document.querySelector(sel);
 const els = {
   list: $('#list'), empty: $('#empty'), input: $('#input'), composer: $('#composer'), chips: $('#chips'),
-  sync: $('#sync'), progressBar: $('#progress-bar'), progressLabel: $('#progress-label'), greeting: $('#greeting'),
+  sync: $('#sync'), progressLabel: $('#progress-label'), greeting: $('#greeting'),
+  hero: $('#hero'), ring: $('#ring'), ringPct: $('#ring-pct'), heroBig: $('#hero-big'),
   mic: $('#mic'), siriSheet: $('#siri-sheet'),
   editSheet: $('#edit-sheet'), editForm: $('#edit-form'), editCategory: $('#edit-category'),
   settingsSheet: $('#settings-sheet'), toast: $('#toast'), toastText: $('#toast-text'), toastAction: $('#toast-action'),
@@ -100,6 +101,8 @@ function renderChips() {
     .map((e, i) => `<button type="button" class="chip" data-i="${i}">${CATEGORY_BY_ID[e.category]?.emoji || '🛒'} ${escapeHtml(e.name)}</button>`)
     .join('');
   els.chips.querySelectorAll('.chip').forEach((btn) => {
+    // Garde le clavier ouvert : les suggestions ne s'affichent que pendant la saisie.
+    btn.addEventListener('pointerdown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
       const e = list[Number(btn.dataset.i)];
       addItem({ name: e.name, qty: '', category: e.category });
@@ -215,8 +218,8 @@ function render() {
   for (const cat of CATEGORIES) {
     const group = todo.filter((i) => (CATEGORY_BY_ID[i.category] ? i.category : 'autre') === cat.id).sort(byName);
     if (!group.length) continue;
-    html += `<section class="group">
-      <div class="group-head"><span class="emoji">${cat.emoji}</span>${cat.label}<span class="count">${group.length}</span></div>
+    html += `<section class="group" style="--cat: ${cat.color}">
+      <div class="group-head"><span class="emoji">${cat.emoji}</span><span class="group-label">${cat.label}</span><span class="count">${group.length}</span></div>
       ${group.map(itemHtml).join('')}
     </section>`;
   }
@@ -247,10 +250,17 @@ function render() {
 
   const total = items.length;
   const pct = total ? Math.round((done.length / total) * 100) : 0;
-  els.progressBar.style.width = `${pct}%`;
+  if (els.hero) {
+    els.hero.hidden = total === 0;
+    els.ring.style.setProperty('--pct', pct);
+    els.ringPct.textContent = `${pct}%`;
+    els.hero.classList.toggle('complete', total > 0 && todo.length === 0);
+    els.heroBig.textContent = todo.length === 0 ? 'Tout est pris 🎉' : `${todo.length} à prendre`;
+  }
   els.progressLabel.textContent = !total ? ''
-    : todo.length === 0 ? 'Tout est dans le caddie 🎉'
-    : `${todo.length} article${todo.length > 1 ? 's' : ''} à prendre · ${done.length}/${total}`;
+    : todo.length === 0 ? `${total} article${total > 1 ? 's' : ''} dans le caddie`
+    : `${done.length} dans le caddie sur ${total}`;
+  els.composer.classList.toggle('list-empty', total === 0);
 }
 
 /* ---------------------------------------------------------------- Gestes */
@@ -751,6 +761,28 @@ function updateGreeting() {
   els.greeting.textContent = me ? `${hello} ${me}` : hello;
 }
 
+/* ---------------------------------------------------------------- Thème */
+
+const THEME_COLORS = { dark: '#0a0d0c', light: '#f3f6f4' };
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $('#theme-color')?.setAttribute('content', THEME_COLORS[dark ? 'dark' : 'light']);
+  document.querySelectorAll('[data-theme-value]').forEach((b) => {
+    b.setAttribute('aria-checked', String(b.dataset.themeValue === theme));
+  });
+}
+
+function setupTheme() {
+  applyTheme(prefs.get('theme', 'dark'));
+  document.querySelectorAll('[data-theme-value]').forEach((b) => b.addEventListener('click', () => {
+    prefs.set('theme', b.dataset.themeValue);
+    applyTheme(b.dataset.themeValue);
+  }));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(prefs.get('theme', 'dark')));
+}
+
 /* ---------------------------------------------------------------- Mises à jour */
 
 // Enregistré dès le démarrage, avant tout le reste : même si une autre partie de
@@ -829,6 +861,13 @@ async function main() {
     addEntries(parseMany(value, { voice }), voice ? '🎙️' : '✓');
   });
   els.input.addEventListener('input', renderChips);
+  // Suggestions visibles uniquement pendant la saisie (ou quand la liste est vide).
+  let blurTimer;
+  els.input.addEventListener('focus', () => { clearTimeout(blurTimer); els.composer.classList.add('focused'); });
+  els.input.addEventListener('blur', () => {
+    blurTimer = setTimeout(() => els.composer.classList.remove('focused'), 150);
+  });
+  setupTheme();
 
   render();
   renderChips();

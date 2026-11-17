@@ -5,16 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Courses</title>
   <meta name="description" content="Liste de courses partagée, utilisable hors ligne.">
-  <meta name="theme-color" content="#f4f6f3" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0f1412" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#0a0d0c" id="theme-color">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Courses">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Thème appliqué avant l'affichage, pour éviter un flash de couleur.
+    try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('courses.theme')) || 'dark'; }
+    catch (e) { document.documentElement.dataset.theme = 'dark'; }
+  </script>
 </head>
 <body>
   <div class="app">
@@ -33,9 +37,15 @@
           </button>
         </div>
       </div>
-      <div class="progress" aria-hidden="true"><div class="progress-bar" id="progress-bar"></div></div>
-      <p class="progress-label" id="progress-label"></p>
     </header>
+
+    <section class="hero" id="hero" hidden>
+      <div class="ring" id="ring" style="--pct: 0"><span id="ring-pct">0%</span></div>
+      <div class="hero-text">
+        <p class="hero-big" id="hero-big"></p>
+        <p class="progress-label" id="progress-label"></p>
+      </div>
+    </section>
 
     <main id="list" class="list" aria-live="polite"></main>
 
@@ -49,11 +59,13 @@
   <form class="composer" id="composer" autocomplete="off">
     <div class="chips" id="chips"></div>
     <div class="composer-row">
-      <input id="input" type="text" inputmode="text" enterkeyhint="done"
-             placeholder="Lait, 2 baguettes…" aria-label="Ajouter un ou plusieurs articles" maxlength="300">
-      <button type="button" class="mic-btn" id="mic" aria-label="Dicter des articles">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-      </button>
+      <div class="field-pill">
+        <input id="input" type="text" inputmode="text" enterkeyhint="done"
+               placeholder="Ajouter un article…" aria-label="Ajouter un ou plusieurs articles" maxlength="300">
+        <button type="button" class="mic-btn" id="mic" aria-label="Dicter des articles">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+      </div>
       <button type="submit" class="add-btn" aria-label="Ajouter">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
@@ -106,6 +118,13 @@
         <span><strong>Ajouter avec Siri</strong><br><small>« Dis Siri, courses maison »</small></span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
+
+      <h2>Apparence</h2>
+      <div class="segmented" id="theme-picker" role="radiogroup" aria-label="Thème">
+        <button type="button" data-theme-value="dark" role="radio">🌙 Sombre</button>
+        <button type="button" data-theme-value="light" role="radio">☀️ Clair</button>
+        <button type="button" data-theme-value="auto" role="radio">⚙️ Auto</button>
+      </div>
 
       <h2>Vous</h2>
       <label class="field"><span>Votre prénom (affiché sur vos ajouts)</span><input id="me-input" maxlength="20" placeholder="ex. Camille"></label>
