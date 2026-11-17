@@ -19,6 +19,18 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    // Réglages partagés de la liste (ordre des rayons).
+    match /lists/{listId}/meta/{docId} {
+      allow get, list: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$');
+      allow create, update: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
+        && docId == 'settings'
+        && request.resource.data.keys().hasOnly(['categoryOrder', 'updatedAt'])
+        && (!('categoryOrder' in request.resource.data)
+            || (request.resource.data.categoryOrder is list && request.resource.data.categoryOrder.size() <= 30));
+    }
+
     // Boîte de réception du raccourci Siri : le raccourci y dépose la phrase dictée
     // (sans connexion, il ne connaît que le code de la liste) ; l'application la
     // transforme en articles puis la supprime.

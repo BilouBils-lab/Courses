@@ -1,6 +1,7 @@
 import { CATEGORIES, CATEGORY_BY_ID, guessCategory, normalize } from './categories.js';
 import { LocalStore, FirebaseStore } from './store.js';
 import { parseMany, capitalize } from './parse.js';
+import { CATALOG, iconFor, nameKey } from './catalog.js';
 import { APP_VERSION, APP_DATE } from './version.js';
 import { firebaseConfig } from '../firebase-config.js';
 
@@ -31,6 +32,18 @@ let inbox = [];
 const highlight = new Set(); // articles à mettre en évidence au prochain affichage
 const handledInbox = new Set();
 let doneOpen = prefs.get('doneOpen', false);
+let view = prefs.get('view', 'list'); // 'list' ou 'tiles'
+let meta = {};                         // réglages partagés (ordre des rayons)
+
+// Rayons dans l'ordre choisi pour le magasin (les rayons non classés gardent l'ordre par défaut).
+function orderedCategories() {
+  const order = Array.isArray(meta.categoryOrder) ? meta.categoryOrder : [];
+  const rank = (c) => {
+    const i = order.indexOf(c.id);
+    return i === -1 ? order.length + CATEGORIES.indexOf(c) : i;
+  };
+  return [...CATEGORIES].sort((a, b) => rank(a) - rank(b));
+}
 
 /* ---------------------------------------------------------------- Liste partagée */
 
@@ -193,6 +206,7 @@ function clearChecked() {
 const checkSvg = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 function itemHtml(item) {
+  if (view === 'tiles') return tileHtml(item);
   const meta = [item.note, item.addedBy && item.addedBy !== prefs.get('me', '') ? `ajouté par ${item.addedBy}` : '']
     .filter(Boolean).map(escapeHtml).join(' · ');
   return `
@@ -215,12 +229,13 @@ function render() {
   const byName = (a, b) => a.createdAt - b.createdAt;
 
   let html = '';
-  for (const cat of CATEGORIES) {
+  const wrap = (inner) => (view === 'tiles' ? `<div class="tiles-grid">${inner}</div>` : inner);
+  for (const cat of orderedCategories()) {
     const group = todo.filter((i) => (CATEGORY_BY_ID[i.category] ? i.category : 'autre') === cat.id).sort(byName);
     if (!group.length) continue;
     html += `<section class="group" style="--cat: ${cat.color}">
       <div class="group-head"><span class="emoji">${cat.emoji}</span><span class="group-label">${cat.label}</span><span class="count">${group.length}</span></div>
-      ${group.map(itemHtml).join('')}
+      ${wrap(group.map(itemHtml).join(''))}
     </section>`;
   }
   if (done.length) {
@@ -232,10 +247,12 @@ function render() {
         <button type="button" data-action="clear">Tout retirer</button>
       </div>
       <div style="height:6px"></div>
-      ${done.map(itemHtml).join('')}
+      ${wrap(done.map(itemHtml).join(''))}
     </section>`;
   }
   els.list.innerHTML = html;
+  els.list.classList.toggle('tiles', view === 'tiles');
+  if ($('#catalog-sheet')?.open) renderCatalog();
   // Met en évidence les articles qui viennent d'être ajoutés et fait défiler jusqu'à eux.
   let first = null;
   for (const id of highlight) {
@@ -261,6 +278,20 @@ function render() {
     : todo.length === 0 ? `${total} article${total > 1 ? 's' : ''} dans le caddie`
     : `${done.length} dans le caddie sur ${total}`;
   els.composer.classList.toggle('list-empty', total === 0);
+}
+
+function tileHtml(item) {
+  const by = item.addedBy && item.addedBy !== prefs.get('me', '') ? item.addedBy : '';
+  return `
+    <div class="item tile${item.checked ? ' checked' : ''}" data-id="${escapeHtml(item.id)}">
+      <div class="item-inner" role="button" tabindex="0" aria-pressed="${item.checked}" aria-label="${escapeHtml(item.name)}">
+        <span class="tile-emoji">${iconFor(item.name, item.category)}</span>
+        <span class="tile-name">${escapeHtml(item.name)}</span>
+        ${item.qty ? `<span class="qty tile-qty">${escapeHtml(item.qty)}</span>` : ''}
+        ${by ? `<span class="tile-by" title="ajouté par ${escapeHtml(by)}">${escapeHtml(by.charAt(0).toUpperCase())}</span>` : ''}
+        <span class="tile-check">${checkSvg}</span>
+      </div>
+    </div>`;
 }
 
 /* ---------------------------------------------------------------- Gestes */
@@ -294,6 +325,7 @@ function setupGestures() {
     const dy = e.clientY - start.y;
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(pressTimer);
     if (!swiped && Math.abs(dy) > Math.abs(dx)) return;
+    if (start.node.classList.contains('tile')) return; // tuiles : pas de glisser (suppression via appui long)
     if (dx < -10) {
       swiped = true;
       start.dx = Math.max(dx, -window.innerWidth);
@@ -761,6 +793,167 @@ function updateGreeting() {
   els.greeting.textContent = me ? `${hello} ${me}` : hello;
 }
 
+/* ---------------------------------------------------------------- Vue liste / tuiles */
+
+function applyView() {
+  const btn = $('#btn-view');
+  if (!btn) return;
+  btn.classList.toggle('is-tiles', view === 'tiles');
+  btn.setAttribute('aria-label', view === 'tiles' ? 'Afficher en liste' : 'Afficher en tuiles');
+}
+
+function setupView() {
+  applyView();
+  $('#btn-view')?.addEventListener('click', () => {
+    view = view === 'tiles' ? 'list' : 'tiles';
+    prefs.set('view', view);
+    applyView();
+    render();
+  });
+}
+
+/* ---------------------------------------------------------------- Catalogue */
+
+// Articles de la liste non cochés, indexés par nom (pour savoir ce qui est déjà ajouté).
+const inListByKey = () => new Map(items.filter((i) => !i.checked).map((i) => [nameKey(i.name), i]));
+
+function catalogTile({ name, emoji, category }, inList) {
+  const item = inList.get(nameKey(name));
+  return `<button type="button" class="cat-tile${item ? ' in' : ''}" style="--cat: ${CATEGORY_BY_ID[category]?.color || 'var(--accent)'}"
+      data-name="${escapeHtml(name)}" data-cat="${category}">
+      <span class="tile-emoji">${emoji}</span>
+      <span class="tile-name">${escapeHtml(name)}</span>
+      ${item?.qty ? `<span class="qty tile-qty">${escapeHtml(item.qty)}</span>` : ''}
+      <span class="tile-check">${checkSvg}</span>
+    </button>`;
+}
+
+function renderCatalog() {
+  const body = $('#catalog-body');
+  if (!body) return;
+  const q = nameKey($('#catalog-search').value.trim());
+  const inList = inListByKey();
+  const match = (name) => !q || nameKey(name).includes(q);
+  let html = '';
+
+  // Fréquents : historique d'achats (sur cet appareil).
+  if (!q) {
+    const frequent = Object.values(history_())
+      .sort((a, b) => b.count - a.count).slice(0, 12)
+      .map((e) => ({ name: e.name, category: e.category || guessCategory(e.name), emoji: iconFor(e.name, e.category) }));
+    if (frequent.length) {
+      html += `<section class="cat-section"><h3>⭐ Fréquents</h3><div class="cat-grid">${frequent.map((e) => catalogTile(e, inList)).join('')}</div></section>`;
+    }
+  }
+  let found = 0;
+  for (const cat of orderedCategories()) {
+    const entries = (CATALOG[cat.id] || []).filter(([name]) => match(name))
+      .map(([name, emoji]) => ({ name, emoji, category: cat.id }));
+    if (!entries.length) continue;
+    found += entries.length;
+    html += `<section class="cat-section" style="--cat: ${cat.color}"><h3>${cat.emoji} ${cat.label}</h3>
+      <div class="cat-grid">${entries.map((e) => catalogTile(e, inList)).join('')}</div></section>`;
+  }
+  // Recherche sans résultat exact : proposer l'article tapé.
+  const typed = $('#catalog-search').value.trim();
+  if (typed && !Object.values(CATALOG).flat().some(([name]) => nameKey(name) === q)) {
+    const category = guessCategory(typed);
+    html = `<section class="cat-section"><h3>Ajouter</h3><div class="cat-grid">${catalogTile({ name: capitalize(typed), emoji: iconFor(typed, category), category }, inList)}</div></section>` + html;
+  } else if (!found && !html) {
+    html = '<p class="muted">Aucun article trouvé.</p>';
+  }
+  body.innerHTML = html;
+}
+
+function setupCatalog() {
+  const sheet = $('#catalog-sheet');
+  const btn = $('#btn-catalog');
+  if (!sheet || !btn) return;
+  const search = $('#catalog-search');
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
+
+  btn.addEventListener('click', () => {
+    search.value = '';
+    renderCatalog();
+    openSheet(sheet);
+  });
+  search.addEventListener('input', renderCatalog);
+  // Entrée dans la recherche : ajoute l'article tapé au lieu de fermer l'écran.
+  search.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const typed = search.value.trim();
+    if (!typed) return;
+    addItem({ name: typed, qty: '', category: guessCategory(typed) }, { silent: true });
+    search.value = '';
+    renderCatalog();
+  });
+  $('#catalog-body').addEventListener('click', (e) => {
+    const tile = e.target.closest('.cat-tile');
+    if (!tile) return;
+    const { name, cat } = tile.dataset;
+    const existing = inListByKey().get(nameKey(name));
+    navigator.vibrate?.(10);
+    if (existing) {
+      store.remove(existing.id);           // toucher à nouveau : retirer de la liste
+      tile.classList.remove('in');
+    } else {
+      addItem({ name, qty: '', category: cat }, { silent: true });
+      tile.classList.add('in');
+    }
+  });
+}
+
+/* ---------------------------------------------------------------- Ordre des rayons */
+
+function renderOrder() {
+  const list = $('#order-list');
+  const cats = orderedCategories();
+  list.innerHTML = cats.map((c, i) => `
+    <li style="--cat: ${c.color}" data-id="${c.id}">
+      <span class="order-emoji">${c.emoji}</span>
+      <span class="order-label">${c.label}</span>
+      <button type="button" class="order-btn" data-move="-1" ${i === 0 ? 'disabled' : ''} aria-label="Monter ${c.label}">
+        <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button type="button" class="order-btn" data-move="1" ${i === cats.length - 1 ? 'disabled' : ''} aria-label="Descendre ${c.label}">
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    </li>`).join('');
+}
+
+function setupOrder() {
+  const sheet = $('#order-sheet');
+  const btn = $('#btn-order');
+  if (!sheet || !btn) return;
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
+  btn.addEventListener('click', () => {
+    els.settingsSheet.close();
+    renderOrder();
+    openSheet(sheet);
+  });
+  $('#order-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-move]');
+    if (!b) return;
+    const ids = orderedCategories().map((c) => c.id);
+    const id = b.closest('li').dataset.id;
+    const i = ids.indexOf(id);
+    const j = i + Number(b.dataset.move);
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    meta = { ...meta, categoryOrder: ids };
+    store.setMeta({ categoryOrder: ids });
+    renderOrder();
+    render();
+    // Garde le bouton sous le doigt après le déplacement.
+    $(`#order-list li[data-id="${id}"] [data-move="${b.dataset.move}"]`)?.focus({ preventScroll: true });
+  });
+  $('#order-reset').addEventListener('click', () => {
+    meta = { ...meta, categoryOrder: CATEGORIES.map((c) => c.id) };
+    store.setMeta({ categoryOrder: meta.categoryOrder });
+    renderOrder();
+    render();
+  });
+}
+
 /* ---------------------------------------------------------------- Thème */
 
 const THEME_COLORS = { dark: '#0a0d0c', light: '#f3f6f4' };
@@ -868,6 +1061,9 @@ async function main() {
     blurTimer = setTimeout(() => els.composer.classList.remove('focused'), 150);
   });
   setupTheme();
+  setupView();
+  setupCatalog();
+  setupOrder();
 
   render();
   renderChips();
@@ -876,6 +1072,11 @@ async function main() {
     setSync,
   );
   store.subscribeInbox((messages) => { inbox = messages; processInbox(); });
+  store.subscribeMeta((next) => {
+    meta = next || {};
+    render();
+    if ($('#order-sheet')?.open) renderOrder();
+  });
   setupSiri();
 
   if (joined) toast('Vous avez rejoint la liste partagée 🎉');

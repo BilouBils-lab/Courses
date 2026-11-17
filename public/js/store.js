@@ -5,7 +5,8 @@
 //
 // Interface : subscribe(onItems, onStatus), add(item), update(id, patch),
 //             remove(id), removeMany(ids), mode,
-//             subscribeInbox(onMessages), removeInbox(id)  (phrases envoyées par Siri)
+//             subscribeInbox(onMessages), removeInbox(id)  (phrases envoyées par Siri),
+//             subscribeMeta(onMeta), setMeta(patch)        (réglages partagés : ordre des rayons)
 
 const FIREBASE_VERSION = '11.0.2';
 const FB = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
@@ -61,6 +62,21 @@ export class LocalStore {
 
   subscribeInbox() { /* pas de boîte de réception sans Firebase */ }
 
+  subscribeMeta(onMeta) {
+    this.onMeta = onMeta;
+    onMeta(this.#loadMeta());
+  }
+
+  setMeta(patch) {
+    const meta = { ...this.#loadMeta(), ...patch };
+    localStorage.setItem(`${this.key}.meta`, JSON.stringify(meta));
+    this.onMeta?.(meta);
+  }
+
+  #loadMeta() {
+    try { return JSON.parse(localStorage.getItem(`${this.key}.meta`)) || {}; } catch { return {}; }
+  }
+
   removeInbox() {}
 
   removeMany(ids) {
@@ -94,6 +110,8 @@ export class FirebaseStore {
     this.col = fsMod.collection(this.db, 'lists', listId, 'items');
     // Boîte de réception : phrases envoyées par le raccourci Siri, à transformer en articles.
     this.inbox = fsMod.collection(this.db, 'lists', listId, 'inbox');
+    // Réglages partagés de la liste (ordre des rayons…).
+    this.metaRef = fsMod.doc(this.db, 'lists', listId, 'meta', 'settings');
 
     // Authentification anonyme (exigée par les règles de sécurité).
     // La session est conservée sur l'appareil, donc pas besoin de réseau ensuite.
@@ -144,6 +162,19 @@ export class FirebaseStore {
       (snap) => onMessages(snap.docs.map((d) => ({ id: d.id, text: String(d.data().text || '') }))),
       (err) => console.error('Boîte de réception', err),
     );
+  }
+
+  async subscribeMeta(onMeta) {
+    await this.authReady;
+    this.fs.onSnapshot(
+      this.metaRef,
+      (snap) => onMeta(snap.exists() ? snap.data() : {}),
+      (err) => console.error('Réglages', err),
+    );
+  }
+
+  setMeta(patch) {
+    this.#fire(this.fs.setDoc(this.metaRef, { ...patch, updatedAt: Date.now() }, { merge: true }));
   }
 
   removeInbox(id) {

@@ -32,6 +32,10 @@
           <span class="sync" id="sync" data-state="local" title="État de la synchronisation">
             <span class="sync-dot"></span><span class="sync-label">Local</span>
           </span>
+          <button class="icon-btn" id="btn-view" aria-label="Afficher en tuiles">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tiles"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-list"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+          </button>
           <button class="icon-btn" id="btn-settings" aria-label="Partage et réglages">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4M2 21v-1a6 6 0 0 1 6-6h0a6 6 0 0 1 6 6v1M8 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 14a5 5 0 0 1 4 5v2"/></svg>
           </button>
@@ -59,6 +63,9 @@
   <form class="composer" id="composer" autocomplete="off">
     <div class="chips" id="chips"></div>
     <div class="composer-row">
+      <button type="button" class="catalog-btn" id="btn-catalog" aria-label="Catalogue d'articles">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18l-2 11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L3 7Z"/><path d="M8 7a4 4 0 0 1 8 0"/></svg>
+      </button>
       <div class="field-pill">
         <input id="input" type="text" inputmode="text" enterkeyhint="done"
                placeholder="Ajouter un article…" aria-label="Ajouter un ou plusieurs articles" maxlength="300">
@@ -119,6 +126,13 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
 
+      <h2>Magasin</h2>
+      <button type="button" class="siri-entry" id="btn-order">
+        <span class="siri-icon order-icon">🧭</span>
+        <span><strong>Ordre des rayons</strong><br><small>Suivre le parcours de votre magasin</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
       <h2>Apparence</h2>
       <div class="segmented" id="theme-picker" role="radiogroup" aria-label="Thème">
         <button type="button" data-theme-value="dark" role="radio">🌙 Sombre</button>
@@ -131,6 +145,33 @@
 
       <div class="sheet-actions">
         <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Catalogue : ajouter sans clavier -->
+  <dialog class="sheet sheet-tall" id="catalog-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title-row">
+        <h2>Catalogue</h2>
+        <button type="submit" class="btn primary small">Terminé</button>
+      </div>
+      <input type="search" class="catalog-search" id="catalog-search" placeholder="Rechercher un article…" autocomplete="off" enterkeyhint="done">
+      <div id="catalog-body"></div>
+    </form>
+  </dialog>
+
+  <!-- Ordre des rayons -->
+  <dialog class="sheet" id="order-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Ordre des rayons</h2>
+      <p class="muted">Rangez les rayons dans l'ordre où vous les traversez en magasin. L'ordre est partagé avec les personnes de la liste.</p>
+      <ol class="order-list" id="order-list"></ol>
+      <div class="sheet-actions">
+        <button type="button" class="btn" id="order-reset">Ordre par défaut</button>
+        <button type="submit" class="btn primary">Terminé</button>
       </div>
     </form>
   </dialog>
