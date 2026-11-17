@@ -471,178 +471,188 @@ function setupSiri() {
 
 /* ---------------------------------------------------------------- Micro */
 
+// Le bouton 🎤 ouvre la dictée du clavier de l'iPhone (fiable, même hors ligne).
+// Appui long : reconnaissance vocale de Safari, en option expérimentale.
+let dictating = false; // la saisie en cours vient de la dictée : découpage « voix »
+
 function setupMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!els.mic) return;
-  if (!SR) { els.mic.hidden = true; return; }
-
   const placeholder = els.input.placeholder;
-  const SILENCE_MS = 1800;   // fin automatique après ce silence (Safari ne signale pas toujours la fin)
-  const START_MS = 4000;     // le micro doit démarrer dans ce délai
-  const NOTHING_MS = 7000;   // rien entendu dans ce délai : on arrête
-  const MAX_MS = 20000;      // durée maximale d'une écoute
-  const ERRORS = {
-    'not-allowed': 'Autorisez le micro pour cette app dans les réglages',
-    'service-not-allowed': 'Reconnaissance vocale non autorisée sur cet appareil',
-    network: 'La reconnaissance vocale a besoin du réseau',
-    'no-speech': 'Je n\'ai rien entendu',
-    'audio-capture': 'Micro introuvable',
+
+  const stopDictation = () => {
+    dictating = false;
+    els.input.placeholder = placeholder;
+    els.mic.classList.remove('active');
   };
+  els.input.addEventListener('blur', () => { if (!els.input.value.trim()) stopDictation(); });
 
-  // Journal de diagnostic (appui long sur 🎤 pour l'afficher).
-  const journal = [];
-  const t0 = Date.now();
-  const log = (msg) => {
-    journal.push(`${((Date.now() - t0) / 1000).toFixed(1)}s ${msg}`);
-    if (journal.length > 60) journal.shift();
-  };
-  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
-  log(`prêt (${standalone ? 'app installée' : 'navigateur'}, ${window.SpeechRecognition ? 'SpeechRecognition' : 'webkitSpeechRecognition'})`);
-
-  // Un seul moteur, réutilisé : sur iPhone, en créer un nouveau à chaque fois
-  // peut empêcher les écoutes suivantes de recevoir le son.
-  let rec = null;
-  let current = null;
-  let successes = 0;
-  let failuresSinceSuccess = 0;
-
-  function createRec() {
-    const r = new SR();
-    r.lang = 'fr-FR';
-    r.interimResults = true;
-    r.continuous = false;
-    // Les événements d'un ancien moteur (remplacé entre-temps) sont ignorés.
-    const mine = () => r === rec;
-    r.onstart = () => { log('onstart'); if (mine()) current?.onstart(); };
-    r.onaudiostart = () => log('onaudiostart');
-    r.onspeechstart = () => log('onspeechstart');
-    r.onspeechend = () => { log('onspeechend'); if (mine()) current?.armSilence(); };
-    r.onresult = (e) => { if (mine()) current?.onresult(e); };
-    r.onerror = (e) => { log(`onerror ${e.error}`); if (mine()) current?.onerror(e); };
-    r.onend = () => { log('onend'); if (mine() && current?.started) current.finish(); };
-    log('moteur créé');
-    return r;
-  }
-
-  function begin() {
-    const session = { finalText: '', interim: '', done: false, started: false, heard: false, timers: [] };
-    const later = (ms, fn) => session.timers.push(setTimeout(fn, ms));
-    let silenceTimer;
-
-    session.armSilence = () => {
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => session.finish(), SILENCE_MS);
-    };
-    session.onstart = () => {
-      session.started = true;
-      els.mic.classList.add('listening');
-      els.input.placeholder = 'Je vous écoute… « du lait et des œufs »';
-      navigator.vibrate?.(15);
-    };
-    session.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        // Chaque segment final correspond en général à une pause : un article à part.
-        if (r.isFinal) session.finalText += (session.finalText ? ', ' : '') + r[0].transcript.trim();
-        else interim += r[0].transcript;
-      }
-      session.interim = interim.trim();
-      session.heard = true;
-      log(`onresult « ${[session.finalText, session.interim].filter(Boolean).join(', ')} »`);
-      els.input.value = [session.finalText, session.interim].filter(Boolean).join(', ');
-      session.armSilence();
-    };
-    session.onerror = (e) => {
-      if (e.error === 'aborted') return;
-      session.finish({ message: ERRORS[e.error] || `Reconnaissance vocale indisponible (${e.error})` });
-    };
-    session.finish = ({ keep = true, message = '' } = {}) => {
-      if (session.done) return;
-      session.done = true;
-      clearTimeout(silenceTimer);
-      session.timers.forEach(clearTimeout);
-      if (current === session) current = null;
-      // abort() libère le micro tout de suite.
-      try { rec?.abort(); } catch { /* déjà terminé */ }
-      els.mic.classList.remove('listening');
-      els.input.placeholder = placeholder;
-
-      const text = keep ? [session.finalText, session.interim].filter(Boolean).join(', ').trim() : '';
-      els.input.value = '';
-      log(`fin (${text ? 'texte reçu' : 'rien reçu'})`);
-      if (text) {
-        successes++;
-        failuresSinceSuccess = 0;
-        const entries = parseMany(text, { voice: true });
-        entries.forEach((entry) => addItem(entry, { silent: true }));
-        renderChips();
-        if (entries.length) { toast(`🎙️ Ajouté : ${entries.map((x) => x.name).join(', ')}`); return; }
-      }
-      failuresSinceSuccess++;
-      // Le micro a marché puis n'entend plus rien : bug de Safari, qu'une relance débloque.
-      const permission = message === ERRORS['not-allowed'] || message === ERRORS['service-not-allowed'];
-      if (successes > 0 && keep && !permission) {
-        rec = null; // prochaine fois : repartir d'un moteur neuf
-        toast('Rien entendu. Si le micro reste bloqué :', 'Relancer l\'app', () => location.reload(), 10000);
-        return;
-      }
-      if (message) toast(message);
-    };
-
-    current = session;
-    later(START_MS, () => {
-      if (!session.started) {
-        rec = null;
-        session.finish({ keep: false, message: 'Le micro ne répond pas, touchez 🎤 pour réessayer' });
-      }
-    });
-    later(NOTHING_MS, () => { if (!session.heard) session.finish({ message: 'Je n\'ai rien entendu' }); });
-    later(MAX_MS, () => session.finish());
-
-    try {
-      rec = rec || createRec();
-      log('start()');
-      rec.start();
-    } catch (err) {
-      // Moteur dans un état incohérent : on en crée un neuf.
-      log(`start() refusé : ${err.name}`);
-      try {
-        rec = createRec();
-        log('start() (nouveau moteur)');
-        rec.start();
-      } catch (err2) {
-        log(`start() refusé : ${err2.name}`);
-        rec = null;
-        session.finish({ keep: false, message: 'Reconnaissance vocale indisponible' });
-      }
-    }
-  }
-
-  // Appui long : afficher le journal de diagnostic.
+  // Appui long : écran expérimental.
   let pressTimer = null;
   let longPressed = false;
   els.mic.addEventListener('pointerdown', () => {
     longPressed = false;
-    pressTimer = setTimeout(() => {
-      longPressed = true;
-      alert(`Diagnostic du micro (version ${APP_VERSION})\n\n${journal.join('\n')}`);
-    }, 700);
+    pressTimer = setTimeout(() => { longPressed = true; navigator.vibrate?.(20); openVoiceLab(); }, 600);
   });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => els.mic.addEventListener(ev, () => clearTimeout(pressTimer)));
   els.mic.addEventListener('contextmenu', (e) => e.preventDefault());
 
   els.mic.addEventListener('click', () => {
     if (longPressed) { longPressed = false; return; }
-    if (current?.started) {
-      // Appui pendant l'écoute : on termine et on ajoute ce qui a été entendu.
-      current.finish();
-      return;
+    dictating = true;
+    els.mic.classList.add('active');
+    els.input.placeholder = 'Touchez 🎙 sur le clavier et dictez…';
+    els.input.focus();
+    if (!prefs.get('dictationHintSeen', false)) {
+      prefs.set('dictationHintSeen', true);
+      toast('Touchez le micro 🎙 du clavier, dictez, puis « OK »', '', null, 7000);
     }
-    // Écoute bloquée sans avoir démarré : on l'abandonne et on repart à zéro.
-    if (current) current.finish({ keep: false });
-    begin();
   });
+
+  return stopDictation;
+}
+
+/* ---------------------------------------------------------------- Micro Safari (expérimental) */
+
+const voiceLab = { journal: [], t0: Date.now(), rec: null, current: null, ready: false };
+
+function voiceLog(msg) {
+  voiceLab.journal.push(`${((Date.now() - voiceLab.t0) / 1000).toFixed(1)}s ${msg}`);
+  if (voiceLab.journal.length > 80) voiceLab.journal.shift();
+  const el = $('#voice-log');
+  if (el) { el.textContent = voiceLab.journal.join('\n'); el.scrollTop = el.scrollHeight; }
+}
+
+function openVoiceLab() {
+  const sheet = $('#voice-sheet');
+  if (!sheet) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const status = $('#voice-status');
+  const startBtn = $('#voice-start');
+  const continuous = $('#voice-continuous');
+  const interim = $('#voice-interim');
+
+  if (!voiceLab.ready) {
+    voiceLab.ready = true;
+    continuous.checked = prefs.get('voiceContinuous', false);
+    interim.checked = prefs.get('voiceInterim', true);
+    continuous.addEventListener('change', () => { prefs.set('voiceContinuous', continuous.checked); voiceLab.rec = null; });
+    interim.addEventListener('change', () => { prefs.set('voiceInterim', interim.checked); voiceLab.rec = null; });
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone;
+    voiceLog(`version ${APP_VERSION}, ${standalone ? 'app installée' : 'navigateur'}, ${SR ? (window.SpeechRecognition ? 'SpeechRecognition' : 'webkitSpeechRecognition') : 'non disponible'}`);
+    startBtn.addEventListener('click', () => {
+      if (voiceLab.current?.started) { voiceLab.current.finish(); return; }
+      if (voiceLab.current) voiceLab.current.finish({ keep: false });
+      startListening();
+    });
+    sheet.addEventListener('close', () => voiceLab.current?.finish());
+  }
+
+  if (!SR) {
+    startBtn.disabled = true;
+    status.textContent = 'La reconnaissance vocale de Safari n\'est pas disponible sur cet appareil.';
+  }
+  voiceLog('écran ouvert');
+  openSheet(sheet);
+
+  function setListening(on) {
+    startBtn.classList.toggle('listening', on);
+    startBtn.textContent = on ? '⏹ Arrêter et ajouter' : '🎤 Démarrer l\'écoute';
+  }
+
+  function createRec() {
+    const r = new SR();
+    r.lang = 'fr-FR';
+    r.interimResults = interim.checked;
+    r.continuous = continuous.checked;
+    const mine = () => r === voiceLab.rec;
+    r.onstart = () => { voiceLog('onstart'); if (mine()) voiceLab.current?.onstart(); };
+    r.onaudiostart = () => voiceLog('onaudiostart');
+    r.onsoundstart = () => voiceLog('onsoundstart');
+    r.onspeechstart = () => voiceLog('onspeechstart');
+    r.onspeechend = () => { voiceLog('onspeechend'); if (mine()) voiceLab.current?.armSilence(); };
+    r.onnomatch = () => voiceLog('onnomatch');
+    r.onresult = (e) => { if (mine()) voiceLab.current?.onresult(e); };
+    r.onerror = (e) => { voiceLog(`onerror ${e.error}`); if (mine()) voiceLab.current?.onerror(e); };
+    r.onend = () => { voiceLog('onend'); if (mine() && voiceLab.current?.started) voiceLab.current.finish(); };
+    voiceLog(`moteur créé (continu: ${r.continuous ? 'oui' : 'non'}, partiels: ${r.interimResults ? 'oui' : 'non'})`);
+    return r;
+  }
+
+  function startListening() {
+    const session = { finalText: '', interim: '', done: false, started: false, heard: false, timers: [] };
+    voiceLab.current = session;
+    let silenceTimer;
+    const text = () => [session.finalText, session.interim].filter(Boolean).join(', ').trim();
+
+    session.armSilence = () => {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => session.finish(), continuous.checked ? 2500 : 1800);
+    };
+    session.onstart = () => {
+      session.started = true;
+      setListening(true);
+      status.textContent = 'Je vous écoute…';
+    };
+    session.onresult = (e) => {
+      let partial = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) session.finalText += (session.finalText ? ', ' : '') + r[0].transcript.trim();
+        else partial += r[0].transcript;
+      }
+      session.interim = partial.trim();
+      session.heard = true;
+      voiceLog(`onresult « ${text()} »`);
+      status.textContent = `« ${text()} »`;
+      session.armSilence();
+    };
+    session.onerror = (e) => {
+      if (e.error === 'aborted') return;
+      session.finish({ message: `Erreur : ${e.error}` });
+    };
+    session.finish = ({ keep = true, message = '' } = {}) => {
+      if (session.done) return;
+      session.done = true;
+      clearTimeout(silenceTimer);
+      session.timers.forEach(clearTimeout);
+      if (voiceLab.current === session) voiceLab.current = null;
+      try { voiceLab.rec?.abort(); } catch { /* déjà terminé */ }
+      setListening(false);
+      const result = keep ? text() : '';
+      voiceLog(`fin (${result ? 'texte reçu' : 'rien reçu'})`);
+      if (result) {
+        const entries = parseMany(result, { voice: true });
+        entries.forEach((entry) => addItem(entry, { silent: true }));
+        renderChips();
+        status.textContent = `✅ Ajouté : ${entries.map((x) => x.name).join(', ')}`;
+        return;
+      }
+      status.textContent = message || 'Rien entendu. Ouvrez le journal ci-dessous pour voir ce qui s\'est passé.';
+    };
+
+    session.timers.push(setTimeout(() => {
+      if (!session.started) { voiceLab.rec = null; session.finish({ keep: false, message: 'Le micro ne répond pas.' }); }
+    }, 4000));
+    session.timers.push(setTimeout(() => { if (!session.heard) session.finish({ message: 'Rien entendu en 8 secondes.' }); }, 8000));
+    session.timers.push(setTimeout(() => session.finish(), 30000));
+
+    try {
+      voiceLab.rec = voiceLab.rec || createRec();
+      voiceLog('start()');
+      voiceLab.rec.start();
+    } catch (err) {
+      voiceLog(`start() refusé : ${err.name}`);
+      try {
+        voiceLab.rec = createRec();
+        voiceLog('start() (nouveau moteur)');
+        voiceLab.rec.start();
+      } catch (err2) {
+        voiceLog(`start() refusé : ${err2.name}`);
+        voiceLab.rec = null;
+        session.finish({ keep: false, message: 'Reconnaissance vocale indisponible.' });
+      }
+    }
+  }
 }
 
 /* ---------------------------------------------------------------- Divers */
@@ -738,14 +748,16 @@ async function main() {
   setupGestures();
   setupSheets();
 
+  const stopDictation = setupMic();
   els.composer.addEventListener('submit', (e) => {
     e.preventDefault();
     const value = els.input.value.trim();
     if (!value) return;
-    const entries = parseMany(value);
+    const entries = parseMany(value, { voice: dictating });
     entries.forEach((e) => addItem(e, { silent: entries.length > 1 }));
-    if (entries.length > 1) toast(`${entries.length} articles ajoutés`);
+    if (entries.length > 1) toast(`${entries.length} articles ajoutés : ${entries.map((x) => x.name).join(', ')}`);
     els.input.value = '';
+    stopDictation?.();
     renderChips();
   });
   els.input.addEventListener('input', renderChips);
@@ -757,7 +769,6 @@ async function main() {
     setSync,
   );
   store.subscribeInbox((messages) => { inbox = messages; processInbox(); });
-  setupMic();
   setupSiri();
 
   if (joined) toast('Vous avez rejoint la liste partagée 🎉');

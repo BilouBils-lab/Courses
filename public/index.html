@@ -116,6 +116,27 @@
     </form>
   </dialog>
 
+  <!-- Reconnaissance vocale de Safari (expérimental) : appui long sur le micro -->
+  <dialog class="sheet" id="voice-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Micro de Safari <span class="badge">expérimental</span></h2>
+      <p class="muted">La reconnaissance vocale intégrée à Safari est instable dans les apps installées sur l'iPhone.
+        Essayez les réglages ci-dessous ; si l'un marche bien, dites-le pour qu'il devienne le comportement normal.</p>
+      <label class="switch"><input type="checkbox" id="voice-continuous"> Écoute continue</label>
+      <label class="switch"><input type="checkbox" id="voice-interim" checked> Résultats partiels pendant la dictée</label>
+      <button type="button" class="btn primary voice-start" id="voice-start">🎤 Démarrer l'écoute</button>
+      <p class="voice-status" id="voice-status">Touchez le bouton puis dictez, par exemple « du lait et des œufs ».</p>
+      <details class="join">
+        <summary>Journal de diagnostic</summary>
+        <pre class="voice-log" id="voice-log"></pre>
+      </details>
+      <div class="sheet-actions">
+        <button type="submit" class="btn">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Feuille de configuration du raccourci Siri -->
   <dialog class="sheet" id="siri-sheet">
     <form method="dialog" class="sheet-body">
