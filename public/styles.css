@@ -212,6 +212,14 @@ h1 { margin: 0; font-size: 32px; letter-spacing: -.03em; font-weight: 800; }
 }
 .add-btn svg { stroke-width: 2.6; }
 .add-btn:active { transform: scale(.92); }
+/* Ajout automatique imminent après une dictée : le bouton se remplit. */
+.add-btn { position: relative; overflow: hidden; }
+.add-btn.auto::before {
+  content: ""; position: absolute; inset: 0; background: rgba(255, 255, 255, .35);
+  transform-origin: left; animation: fill 2s linear forwards;
+}
+@keyframes fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.add-btn svg { position: relative; }
 
 .mic-btn {
   flex: none; width: 46px; height: 46px; border: 0; border-radius: 16px;

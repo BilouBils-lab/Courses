@@ -508,12 +508,45 @@ function setupMic() {
   if (!els.mic) return;
   const placeholder = els.input.placeholder;
 
+  const addBtn = els.composer.querySelector('.add-btn');
+  const AUTO_MS = 2000; // pause après la dictée avant l'ajout automatique
+  let autoTimer = null;
+
+  const cancelAuto = () => {
+    clearTimeout(autoTimer);
+    autoTimer = null;
+    addBtn?.classList.remove('auto');
+  };
   const stopDictation = () => {
     dictating = false;
+    cancelAuto();
     els.input.placeholder = placeholder;
     els.mic.classList.remove('active');
   };
   els.input.addEventListener('blur', () => { if (!els.input.value.trim()) stopDictation(); });
+
+  // Ajout automatique après une dictée : plus besoin de toucher « OK ».
+  // Pendant la dictée, l'iPhone insère un caractère provisoire (U+FFFC) : il
+  // signale une dictée même sans passer par le bouton 🎤, et tant qu'il est
+  // présent la reconnaissance n'est pas terminée.
+  els.input.addEventListener('input', () => {
+    const value = els.input.value;
+    const inProgress = value.includes('\uFFFC');
+    if (inProgress) dictating = true;
+    if (!dictating) return;
+    cancelAuto();
+    if (inProgress || !value.trim()) return;
+    // Relance l'animation du bouton ✚ (remplissage pendant le délai).
+    void addBtn?.offsetWidth;
+    addBtn?.classList.add('auto');
+    autoTimer = setTimeout(() => {
+      autoTimer = null;
+      if (els.input.value.trim()) {
+        if (els.composer.requestSubmit) els.composer.requestSubmit();
+        else els.composer.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    }, AUTO_MS);
+  });
 
   // Appui long : écran expérimental.
   let pressTimer = null;
@@ -533,7 +566,7 @@ function setupMic() {
     els.input.focus();
     if (!prefs.get('dictationHintSeen', false)) {
       prefs.set('dictationHintSeen', true);
-      toast('Touchez le micro 🎙 du clavier, dictez, puis « OK »', '', null, 7000);
+      toast('Touchez le micro 🎙 du clavier et dictez : les articles s\'ajoutent tout seuls', '', null, 7000);
     }
   });
 
@@ -788,7 +821,7 @@ async function main() {
   const stopDictation = setupMic();
   els.composer.addEventListener('submit', (e) => {
     e.preventDefault();
-    const value = els.input.value.trim();
+    const value = els.input.value.replace(/\uFFFC/g, '').trim();
     if (!value) return;
     const voice = dictating;
     els.input.value = '';
