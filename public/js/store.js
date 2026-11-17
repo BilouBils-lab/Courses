@@ -62,6 +62,8 @@ export class LocalStore {
 
   subscribeInbox() { /* pas de boîte de réception sans Firebase */ }
 
+  async reconnect() { /* rien à synchroniser en mode local */ }
+
   subscribeMeta(onMeta) {
     this.onMeta = onMeta;
     onMeta(this.#loadMeta());
@@ -134,7 +136,7 @@ export class FirebaseStore {
       if (!navigator.onLine) onStatus('offline');
       else if (pending) onStatus('pending');
       else if (fromCache) onStatus('offline');
-      else onStatus('synced');
+      else { this.lastSyncedAt = Date.now(); onStatus('synced'); }
     };
     window.addEventListener('online', report);
     window.addEventListener('offline', report);
@@ -175,6 +177,12 @@ export class FirebaseStore {
 
   setMeta(patch) {
     this.#fire(this.fs.setDoc(this.metaRef, { ...patch, updatedAt: Date.now() }, { merge: true }));
+  }
+
+  // Coupe puis rétablit la connexion : force une synchronisation immédiate.
+  async reconnect() {
+    await this.fs.disableNetwork(this.db);
+    await this.fs.enableNetwork(this.db);
   }
 
   removeInbox(id) {

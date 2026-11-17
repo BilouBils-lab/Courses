@@ -840,7 +840,11 @@ function toast(text, actionLabel = '', action = null, duration = 4000) {
 const SYNC_LABELS = {
   local: 'Local', synced: 'Synchronisé', pending: 'Envoi…', offline: 'Hors ligne', error: 'Erreur',
 };
+let syncState = 'local';
+
 function setSync(state) {
+  syncState = state;
+  if ($('#sync-sheet')?.open) renderSyncSheet();
   els.sync.dataset.state = state;
   els.sync.querySelector('.sync-label').textContent = SYNC_LABELS[state] || state;
   els.sync.title = {
@@ -850,6 +854,78 @@ function setSync(state) {
     offline: 'Hors ligne : vos modifications seront envoyées au retour du réseau',
     error: 'Erreur de synchronisation (vérifiez la configuration Firebase)',
   }[state] || '';
+}
+
+/* ---------------------------------------------------------------- Fenêtre « Synchronisation » */
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 10) return 'à l\'instant';
+  if (s < 60) return `il y a ${s} s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `il y a ${m} min`;
+  return `à ${new Date(ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function renderSyncSheet() {
+  const shared = store.mode === 'shared';
+  const text = {
+    local: 'Liste enregistrée sur cet appareil uniquement (partage non configuré).',
+    synced: '✅ Liste à jour avec les autres téléphones.',
+    pending: '⏳ Envoi de vos modifications en cours…',
+    offline: '📴 Hors ligne : vos modifications sont gardées et seront envoyées au retour du réseau.',
+    error: '⚠️ Erreur de synchronisation.',
+  }[syncState] || '';
+  const last = store.lastSyncedAt ? ` Dernière synchronisation : ${timeAgo(store.lastSyncedAt)}.` : '';
+  $('#sync-status').textContent = text + (shared ? last : '');
+  $('#btn-refresh').hidden = !shared;
+  $('#btn-refresh').nextElementSibling.hidden = !shared;
+}
+
+function setupSyncSheet() {
+  const sheet = $('#sync-sheet');
+  if (!sheet || els.sync.tagName !== 'BUTTON') return;
+  const nameInput = $('#shortcut-name');
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
+
+  els.sync.addEventListener('click', () => {
+    nameInput.value = prefs.get('shortcutName', '');
+    renderSyncSheet();
+    openSheet(sheet);
+  });
+  nameInput.addEventListener('change', () => prefs.set('shortcutName', nameInput.value.trim()));
+
+  $('#btn-refresh').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = '🔄 Actualisation…';
+    try {
+      await Promise.race([store.reconnect(), new Promise((r) => setTimeout(r, 8000))]);
+      // Re-vérifie aussi les ajouts Siri en attente dans la boîte de réception.
+      handledInbox.clear();
+      processInbox();
+    } catch (err) {
+      console.error(err);
+    }
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '🔄 Actualiser maintenant';
+      renderSyncSheet();
+    }, 800);
+  });
+
+  $('#btn-run-shortcut').addEventListener('click', () => {
+    const name = nameInput.value.trim() || 'Transférer les courses';
+    prefs.set('shortcutName', nameInput.value.trim());
+    // Ouvre l'app Raccourcis et lance le raccourci de transfert depuis Rappels.
+    location.href = `shortcuts://run-shortcut?name=${encodeURIComponent(name)}`;
+  });
+
+  // Au retour dans l'app (après le raccourci), on actualise tout de suite.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && store.mode === 'shared') store.reconnect().catch(() => {});
+  });
 }
 
 function updateGreeting() {
@@ -1130,6 +1206,7 @@ async function main() {
   setupView();
   setupCatalog();
   setupOrder();
+  setupSyncSheet();
 
   render();
   renderChips();

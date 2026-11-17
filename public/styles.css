@@ -135,6 +135,8 @@ button:focus:not(:focus-visible) { outline: none; }
   border: 1px solid var(--line); background: var(--surface-2);
   font-size: 13px; font-weight: 650; color: var(--muted); white-space: nowrap;
 }
+.sync { cursor: pointer; font-family: inherit; }
+.sync:active { transform: scale(.95); }
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .sync[data-state="synced"] .sync-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 0 10px var(--accent-glow); }
 .sync[data-state="pending"] .sync-dot { background: #fbbf24; animation: pulse 1.2s infinite; }
@@ -396,6 +398,9 @@ body.locked { position: fixed; left: 0; right: 0; overflow: hidden; }
 .btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .5; }
 .muted { color: var(--muted); font-size: 15px; margin-top: 0; }
+.btn.wide { width: 100%; margin-top: 8px; }
+.small-note { font-size: 13px; margin: 6px 2px 14px; }
+.sync-status { font-weight: 600; margin: 0 0 14px; line-height: 1.45; }
 .version { text-align: center; color: var(--muted); font-size: 12px; margin: -4px 0 4px; }
 
 .share-box {

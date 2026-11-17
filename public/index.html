@@ -29,9 +29,9 @@
           <h1>Courses</h1>
         </div>
         <div class="topbar-actions">
-          <span class="sync" id="sync" data-state="local" title="État de la synchronisation">
+          <button type="button" class="sync" id="sync" data-state="local" aria-label="Synchronisation">
             <span class="sync-dot"></span><span class="sync-label">Local</span>
-          </span>
+          </button>
           <button class="icon-btn" id="btn-view" aria-label="Afficher en tuiles">
             <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tiles"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
             <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-list"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
@@ -145,6 +145,27 @@
 
       <div class="sheet-actions">
         <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Synchronisation -->
+  <dialog class="sheet" id="sync-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Synchronisation</h2>
+      <p class="sync-status" id="sync-status"></p>
+      <button type="button" class="btn primary wide" id="btn-refresh">🔄 Actualiser maintenant</button>
+      <p class="muted small-note">Force la reconnexion et récupère tout de suite les changements de l'autre téléphone.</p>
+      <button type="button" class="btn wide" id="btn-run-shortcut">🎙️ Récupérer les ajouts de Siri</button>
+      <p class="muted small-note">Lance votre raccourci qui transfère la liste « Courses » de Rappels dans l'app.
+        Revenez ensuite ici avec « ◀ Courses » en haut à gauche de l'écran.</p>
+      <details class="join">
+        <summary>Nom du raccourci</summary>
+        <div class="join-row"><input id="shortcut-name" placeholder="Transférer les courses"></div>
+      </details>
+      <div class="sheet-actions">
+        <button type="submit" class="btn">Fermer</button>
       </div>
     </form>
   </dialog>
