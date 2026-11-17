@@ -6,7 +6,7 @@ Une PWA (application web installable) pour faire les courses à deux :
 - **Partagée en temps réel** : chacun voit les ajouts et les articles cochés par l'autre (via Firebase Firestore, offre gratuite).
 - **Rangée par rayon** : les articles sont classés automatiquement (fruits & légumes, crèmerie, surgelés…) dans l'ordre d'un parcours en magasin.
 - **Saisie rapide** : « 2 lait », « farine 500g », « steak haché x4 »… La quantité est reconnue, et plusieurs articles peuvent être saisis d'un coup (« lait, œufs et 2 baguettes »). Les articles fréquents sont proposés en suggestions.
-- **À la voix** : bouton 🎤 dans l'application, et raccourci Siri « Dis Siri, ajoute aux courses » (voir plus bas).
+- **À la voix** : bouton 🎤 dans l'application, et raccourci Siri « Dis Siri, courses maison » (voir plus bas).
 - **Design moderne**, mode sombre automatique, installable sur l'écran d'accueil (Android et iPhone).
 
 ## Utilisation
