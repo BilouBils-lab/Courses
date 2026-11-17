@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// Chaque liste est identifiée par un code aléatoire long (≈ 80 bits) partagé par lien.
+// Seules les personnes connaissant ce code peuvent lire ou modifier la liste.
+// Lister toutes les listes existantes est interdit.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /lists/{listId}/items/{itemId} {
+      allow get, list: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$');
+
+      allow create, update: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.keys().hasOnly(['name', 'qty', 'note', 'category', 'checked', 'checkedBy', 'addedBy', 'createdAt', 'updatedAt']);
+
+      allow delete: if request.auth != null;
+    }
+
+    // Réglages partagés de la liste (ordre des rayons).
+    match /lists/{listId}/meta/{docId} {
+      allow get, list: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$');
+      allow create, update: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
+        && docId == 'settings'
+        && request.resource.data.keys().hasOnly(['categoryOrder', 'updatedAt'])
+        && (!('categoryOrder' in request.resource.data)
+            || (request.resource.data.categoryOrder is list && request.resource.data.categoryOrder.size() <= 30));
+    }
+
+    // Boîte de réception du raccourci Siri : le raccourci y dépose la phrase dictée
+    // (sans connexion, il ne connaît que le code de la liste) ; l'application la
+    // transforme en articles puis la supprime.
+    match /lists/{listId}/inbox/{msgId} {
+      allow create: if listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
+        && request.resource.data.keys().hasOnly(['text'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 500;
+
+      allow get, list, delete: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$');
+    }
+  }
+}
