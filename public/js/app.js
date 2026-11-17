@@ -27,6 +27,7 @@ let store;
 let items = [];
 let itemsLoaded = false;
 let inbox = [];
+const highlight = new Set(); // articles à mettre en évidence au prochain affichage
 const handledInbox = new Set();
 let doneOpen = prefs.get('doneOpen', false);
 
@@ -120,13 +121,15 @@ function addItem({ name, qty, category, id, addedBy }, { silent = false } = {}) 
   if (existing) {
     if (qty && qty !== existing.qty) store.update(existing.id, { qty, updatedAt: Date.now() });
     if (!silent) toast(`« ${name} » est déjà dans la liste`);
-    return;
+    highlight.add(existing.id);
+    return { name, status: 'exists' };
   }
   const checkedTwin = items.find((i) => i.checked && normalize(i.name) === normalize(name));
   if (checkedTwin) {
     store.update(checkedTwin.id, { checked: false, qty: qty || checkedTwin.qty, updatedAt: Date.now() });
     remember(checkedTwin);
-    return;
+    highlight.add(checkedTwin.id);
+    return { name, status: 'added' };
   }
   const knownCategory = history_()[normalize(name)]?.category;
   const item = {
@@ -140,8 +143,24 @@ function addItem({ name, qty, category, id, addedBy }, { silent = false } = {}) 
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
+  highlight.add(item.id);
   store.add(item);
   remember(item);
+  return { name, status: 'added' };
+}
+
+// Ajoute plusieurs articles et confirme toujours ce qui s'est passé.
+function addEntries(entries, prefix = '✓') {
+  const results = entries.map((e) => addItem(e, { silent: true })).filter(Boolean);
+  const added = results.filter((r) => r.status === 'added').map((r) => r.name);
+  const already = results.filter((r) => r.status === 'exists').map((r) => r.name);
+  const parts = [];
+  if (added.length) parts.push(`${prefix} Ajouté : ${added.join(', ')}`);
+  if (already.length) parts.push(`Déjà dans la liste : ${already.join(', ')}`);
+  if (parts.length) toast(parts.join(' · '), '', null, 5000);
+  else toast('Je n\'ai reconnu aucun article');
+  renderChips();
+  return results;
 }
 
 function toggle(item) {
@@ -214,6 +233,16 @@ function render() {
     </section>`;
   }
   els.list.innerHTML = html;
+  // Met en évidence les articles qui viennent d'être ajoutés et fait défiler jusqu'à eux.
+  let first = null;
+  for (const id of highlight) {
+    const node = els.list.querySelector(`.item[data-id="${CSS.escape(id)}"]`);
+    if (!node) continue;
+    node.classList.add('flash');
+    first = first || node;
+    highlight.delete(id);
+  }
+  first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   els.empty.hidden = items.length > 0;
 
   const total = items.length;
@@ -524,7 +553,7 @@ function voiceLog(msg) {
 
 function openVoiceLab() {
   const sheet = $('#voice-sheet');
-  if (!sheet) return;
+  if (!sheet) { toast('Fermez et rouvrez l\'app pour terminer la mise à jour'); return; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const status = $('#voice-status');
   const startBtn = $('#voice-start');
@@ -713,6 +742,13 @@ function setupUpdates() {
   }
 }
 
+// Affiche à l'écran les erreurs inattendues : utile pour diagnostiquer sur le téléphone.
+function reportErrors() {
+  const show = (msg) => toast(`⚠️ Erreur (v${APP_VERSION}) : ${String(msg).slice(0, 140)}`, '', null, 12000);
+  window.addEventListener('error', (e) => show(e.message || e.error));
+  window.addEventListener('unhandledrejection', (e) => show(e.reason?.message || e.reason));
+}
+
 function showVersion() {
   let el = $('#version');
   if (!el) {
@@ -730,6 +766,7 @@ function showVersion() {
 async function main() {
   setupUpdates();
   showVersion();
+  reportErrors();
   const { joined } = resolveListId();
 
   if (firebaseConfig) {
@@ -753,12 +790,10 @@ async function main() {
     e.preventDefault();
     const value = els.input.value.trim();
     if (!value) return;
-    const entries = parseMany(value, { voice: dictating });
-    entries.forEach((e) => addItem(e, { silent: entries.length > 1 }));
-    if (entries.length > 1) toast(`${entries.length} articles ajoutés : ${entries.map((x) => x.name).join(', ')}`);
+    const voice = dictating;
     els.input.value = '';
     stopDictation?.();
-    renderChips();
+    addEntries(parseMany(value, { voice }), voice ? '🎙️' : '✓');
   });
   els.input.addEventListener('input', renderChips);
 
