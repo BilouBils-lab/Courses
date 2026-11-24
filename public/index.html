@@ -51,6 +51,12 @@
       </div>
     </section>
 
+    <button type="button" class="forgot-btn" id="btn-forgot" hidden>
+      <span class="forgot-icon">🧠</span>
+      <span class="forgot-text"><strong>Rien oublié ?</strong><small id="forgot-sub"></small></span>
+      <span class="forgot-badge" id="forgot-badge"></span>
+    </button>
+
     <main id="list" class="list" aria-live="polite"></main>
 
     <section class="empty" id="empty" hidden>
@@ -145,6 +151,22 @@
 
       <div class="sheet-actions">
         <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Rien oublié ? -->
+  <dialog class="sheet" id="forgot-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title-row">
+        <h2>Rien oublié ?</h2>
+        <button type="button" class="btn primary small" id="forgot-all">Tout ajouter</button>
+      </div>
+      <p class="muted" id="forgot-intro"></p>
+      <ul class="forgot-list" id="forgot-list"></ul>
+      <div class="sheet-actions">
+        <button type="submit" class="btn">Fermer</button>
       </div>
     </form>
   </dialog>
