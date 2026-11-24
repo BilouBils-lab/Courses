@@ -49,6 +49,9 @@
         <p class="hero-big" id="hero-big"></p>
         <p class="progress-label" id="progress-label"></p>
       </div>
+      <button type="button" class="hero-undo" id="btn-undo-hero" aria-label="Annuler la dernière action" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
     </section>
 
     <button type="button" class="forgot-btn" id="btn-forgot" hidden>
@@ -64,6 +67,13 @@
       <h2>La liste est vide</h2>
       <p>Ajoutez des articles ci-dessous, au clavier ou au micro 🎤.<br>Astuce : « 2 lait, farine 500g et des œufs ».</p>
     </section>
+  </div>
+
+  <div class="undo-pill" id="undo-pill" hidden>
+    <button type="button" id="undo-btn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      <strong>Annuler</strong><span id="undo-label"></span>
+    </button>
   </div>
 
   <form class="composer" id="composer" autocomplete="off">

@@ -650,3 +650,30 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .order-label small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); }
 .order-eye[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .order-spacer { visibility: hidden; }
+
+/* ---------- Annuler ---------- */
+.hero-undo {
+  flex: none; margin-left: auto; align-self: flex-start;
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+}
+.hero-undo:active { transform: scale(.92); }
+.undo-pill {
+  position: fixed; left: 50%; bottom: calc(92px + var(--safe-b)); z-index: 12;
+  transform: translateX(-50%); max-width: calc(100% - 32px);
+}
+.composer.focused ~ .undo-pill, .undo-pill:has(+ .composer.focused) { bottom: calc(146px + var(--safe-b)); }
+.undo-pill.pop { animation: undo-in .25s ease-out; }
+@keyframes undo-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.undo-pill button {
+  display: flex; align-items: center; gap: 8px; max-width: 100%;
+  padding: 10px 16px 10px 12px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: var(--surface-3); color: var(--text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  font-size: 14px; white-space: nowrap;
+}
+.undo-pill svg { flex: none; width: 18px; height: 18px; color: var(--accent); }
+.undo-pill strong { color: var(--accent); }
+.undo-pill span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.undo-pill span::before { content: "· "; }
