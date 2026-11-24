@@ -84,14 +84,44 @@ function shareUrl() {
 
 /* ---------------------------------------------------------------- Historique */
 
-function history_() { return prefs.get('history', {}); }
+// Historique des articles, partagé entre les téléphones de la liste (voir store.js).
+let historyMap = {};
+function history_() { return historyMap; }
 
-function remember(item) {
-  const h = history_();
+// `count: false` : met seulement à jour le rayon (modification d'un article), sans compter un achat.
+function remember(item, { count = true } = {}) {
   const key = normalize(item.name);
-  const prev = h[key] || { count: 0 };
-  h[key] = { name: item.name, category: item.category, count: prev.count + 1, last: Date.now() };
-  prefs.set('history', h);
+  const prev = historyMap[key] || { count: 0 };
+  historyMap = { ...historyMap, [key]: { name: item.name, category: item.category, count: prev.count + (count ? 1 : 0), last: Date.now() } };
+  store.recordHistory(key, { name: item.name, category: item.category }, count ? 1 : 0);
+}
+
+// Première ouverture en mode partagé : l'historique propre à ce téléphone (versions
+// précédentes) est ajouté à l'historique commun, une seule fois. Les restes des essais
+// Siri (« Dis Siri ajoute… ») sont écartés.
+function migrateLocalHistory() {
+  if (store.mode !== 'shared' || prefs.get('historyShared', false)) return;
+  const local = prefs.get('history', {});
+  for (const [key, e] of Object.entries(local)) {
+    if (!e?.name || /siri/i.test(e.name) || e.name.length > 80) continue;
+    store.recordHistory(key, { name: e.name, category: e.category || guessCategory(e.name) }, Math.max(1, e.count || 1));
+  }
+  prefs.set('historyShared', true);
+}
+
+function forgetSuggestion(entry) {
+  const key = normalize(entry.name);
+  const saved = historyMap[key];
+  if (!saved) return;
+  const { [key]: _, ...rest } = historyMap;
+  historyMap = rest;
+  store.removeHistory(key);
+  renderChips();
+  toast(`« ${entry.name} » retiré des suggestions`, 'Annuler', () => {
+    historyMap = { ...historyMap, [key]: saved };
+    store.restoreHistory(key, saved);
+    renderChips();
+  });
 }
 
 function suggestions(query) {
@@ -114,9 +144,23 @@ function renderChips() {
     .map((e, i) => `<button type="button" class="chip" data-i="${i}">${CATEGORY_BY_ID[e.category]?.emoji || '🛒'} ${escapeHtml(e.name)}</button>`)
     .join('');
   els.chips.querySelectorAll('.chip').forEach((btn) => {
+    // Appui long : retirer la suggestion de l'historique commun.
+    let pressTimer = null;
+    let longPressed = false;
     // Garde le clavier ouvert : les suggestions ne s'affichent que pendant la saisie.
-    btn.addEventListener('pointerdown', (e) => e.preventDefault());
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      longPressed = false;
+      pressTimer = setTimeout(() => {
+        longPressed = true;
+        navigator.vibrate?.(20);
+        forgetSuggestion(list[Number(btn.dataset.i)]);
+      }, 600);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => btn.addEventListener(ev, () => clearTimeout(pressTimer)));
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
+      if (longPressed) { longPressed = false; return; }
       const e = list[Number(btn.dataset.i)];
       addItem({ name: e.name, qty: '', category: e.category });
       els.input.value = '';
@@ -503,7 +547,7 @@ function setupSheets() {
     };
     store.update(editing.id, patch);
     // Mémorise le rayon choisi pour les prochaines fois.
-    remember({ ...editing, ...patch });
+    remember({ ...editing, ...patch }, { count: false });
     editing = null;
   });
   $('#edit-delete').addEventListener('click', () => {
@@ -1215,6 +1259,12 @@ async function main() {
     setSync,
   );
   store.subscribeInbox((messages) => { inbox = messages; processInbox(); });
+  store.subscribeHistory((next) => {
+    historyMap = next || {};
+    renderChips();
+    if ($('#catalog-sheet')?.open) renderCatalog();
+  });
+  migrateLocalHistory();
   store.subscribeMeta((next) => {
     meta = next || {};
     render();

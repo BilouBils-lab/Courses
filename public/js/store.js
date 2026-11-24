@@ -6,7 +6,14 @@
 // Interface : subscribe(onItems, onStatus), add(item), update(id, patch),
 //             remove(id), removeMany(ids), mode,
 //             subscribeInbox(onMessages), removeInbox(id)  (phrases envoyées par Siri),
-//             subscribeMeta(onMeta), setMeta(patch)        (réglages partagés : ordre des rayons)
+//             subscribeMeta(onMeta), setMeta(patch)        (réglages partagés : ordre des rayons),
+//             subscribeHistory(onHistory), recordHistory(key, entry, by), removeHistory(key), restoreHistory(key, entry)
+//             (historique des articles, partagé : alimente « Fréquents » et suggestions)
+
+// Identifiant de document sûr à partir d'une clé d'article (« pommes de terre » → « pommes-de-terre »).
+export const historyId = (key) => key.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100) || 'article';
+
+import { normalize } from './categories.js';
 
 const FIREBASE_VERSION = '11.0.2';
 const FB = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
@@ -64,6 +71,38 @@ export class LocalStore {
 
   async reconnect() { /* rien à synchroniser en mode local */ }
 
+  // Historique local (même format que les versions précédentes : courses.history).
+  #loadHistory() {
+    try { return JSON.parse(localStorage.getItem('courses.history')) || {}; } catch { return {}; }
+  }
+
+  #saveHistory(h) {
+    localStorage.setItem('courses.history', JSON.stringify(h));
+    this.onHistory?.(h);
+  }
+
+  subscribeHistory(onHistory) {
+    this.onHistory = onHistory;
+    onHistory(this.#loadHistory());
+  }
+
+  recordHistory(key, { name, category }, by = 1) {
+    const h = this.#loadHistory();
+    const prev = h[key] || { count: 0 };
+    h[key] = { name, category, count: prev.count + by, last: Date.now() };
+    this.#saveHistory(h);
+  }
+
+  removeHistory(key) {
+    const h = this.#loadHistory();
+    delete h[key];
+    this.#saveHistory(h);
+  }
+
+  restoreHistory(key, entry) {
+    this.#saveHistory({ ...this.#loadHistory(), [key]: entry });
+  }
+
   subscribeMeta(onMeta) {
     this.onMeta = onMeta;
     onMeta(this.#loadMeta());
@@ -114,6 +153,8 @@ export class FirebaseStore {
     this.inbox = fsMod.collection(this.db, 'lists', listId, 'inbox');
     // Réglages partagés de la liste (ordre des rayons…).
     this.metaRef = fsMod.doc(this.db, 'lists', listId, 'meta', 'settings');
+    // Historique partagé des articles (un document par article).
+    this.historyCol = fsMod.collection(this.db, 'lists', listId, 'history');
 
     // Authentification anonyme (exigée par les règles de sécurité).
     // La session est conservée sur l'appareil, donc pas besoin de réseau ensuite.
@@ -176,7 +217,38 @@ export class FirebaseStore {
   }
 
   setMeta(patch) {
-    this.#fire(this.fs.setDoc(this.metaRef, { ...patch, updatedAt: Date.now() }, { merge: true }));
+    this.#write(() => this.fs.setDoc(this.metaRef, { ...patch, updatedAt: Date.now() }, { merge: true }));
+  }
+
+  async subscribeHistory(onHistory) {
+    await this.authReady;
+    this.fs.onSnapshot(
+      this.historyCol,
+      (snap) => {
+        const h = {};
+        snap.docs.forEach((d) => {
+          const e = d.data();
+          if (e?.name) h[normalize(e.name)] = { name: e.name, category: e.category || 'autre', count: e.count || 0, last: e.last || 0 };
+        });
+        onHistory(h, { fromServer: !snap.metadata.fromCache });
+      },
+      (err) => console.error('Historique', err),
+    );
+  }
+
+  // Compteur incrémenté côté serveur : pas de perte si les deux téléphones ajoutent en même temps.
+  recordHistory(key, { name, category }, by = 1) {
+    this.#write(() => this.fs.setDoc(this.fs.doc(this.historyCol, historyId(key)), {
+      name, category, count: this.fs.increment(by), last: Date.now(),
+    }, { merge: true }));
+  }
+
+  removeHistory(key) {
+    this.#write(() => this.fs.deleteDoc(this.fs.doc(this.historyCol, historyId(key))));
+  }
+
+  restoreHistory(key, entry) {
+    this.#write(() => this.fs.setDoc(this.fs.doc(this.historyCol, historyId(key)), entry));
   }
 
   // Coupe puis rétablit la connexion : force une synchronisation immédiate.
@@ -186,32 +258,37 @@ export class FirebaseStore {
   }
 
   removeInbox(id) {
-    this.#fire(this.fs.deleteDoc(this.fs.doc(this.inbox, id)));
+    this.#write(() => this.fs.deleteDoc(this.fs.doc(this.inbox, id)));
   }
 
   // Les promesses Firestore ne se résolvent qu'après accusé de réception du
   // serveur : on ne les attend pas, l'interface est mise à jour immédiatement
   // depuis le cache local.
-  #fire(promise) {
-    promise.catch((err) => console.error('Firestore', err));
+  // Écriture après la connexion anonyme : sinon la base la refuse (règles de sécurité).
+  // Hors ligne au premier lancement, authReady se résout quand même au bout de 2,5 s :
+  // l'écriture est alors mise en file d'attente par Firestore.
+  #write(op) {
+    this.authReady
+      .then(op)
+      .catch((err) => console.error('Firestore', err));
   }
 
   add(item) {
     const { id, ...data } = item;
-    this.#fire(this.fs.setDoc(this.fs.doc(this.col, id), data));
+    this.#write(() => this.fs.setDoc(this.fs.doc(this.col, id), data));
   }
 
   update(id, patch) {
-    this.#fire(this.fs.updateDoc(this.fs.doc(this.col, id), patch));
+    this.#write(() => this.fs.updateDoc(this.fs.doc(this.col, id), patch));
   }
 
   remove(id) {
-    this.#fire(this.fs.deleteDoc(this.fs.doc(this.col, id)));
+    this.#write(() => this.fs.deleteDoc(this.fs.doc(this.col, id)));
   }
 
   removeMany(ids) {
     const batch = this.fs.writeBatch(this.db);
     ids.forEach((id) => batch.delete(this.fs.doc(this.col, id)));
-    this.#fire(batch.commit());
+    this.#write(() => batch.commit());
   }
 }

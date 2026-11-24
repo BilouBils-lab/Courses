@@ -31,6 +31,19 @@ service cloud.firestore {
             || (request.resource.data.categoryOrder is list && request.resource.data.categoryOrder.size() <= 30));
     }
 
+    // Historique partagé des articles (alimente « Fréquents » et suggestions).
+    match /lists/{listId}/history/{entryId} {
+      allow get, list, delete: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$');
+      allow create, update: if request.auth != null
+        && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
+        && request.resource.data.keys().hasOnly(['name', 'category', 'count', 'last'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.count is number;
+    }
+
     // Boîte de réception du raccourci Siri : le raccourci y dépose la phrase dictée
     // (sans connexion, il ne connaît que le code de la liste) ; l'application la
     // transforme en articles puis la supprime.
