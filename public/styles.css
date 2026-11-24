@@ -642,3 +642,11 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 }
 .forgot-add svg { width: 20px; height: 20px; stroke-width: 2.8; }
 .forgot-add:active { transform: scale(.9); }
+
+/* Rayons masqués : seuls le nom et l'icône sont grisés, le bouton 👁 reste bien visible. */
+.order-list li.is-hidden { background: var(--surface-2); border-style: dashed; }
+.order-list li.is-hidden .order-emoji, .order-list li.is-hidden .order-name { opacity: .45; }
+.order-list li.is-hidden .order-name { color: var(--muted); text-decoration: line-through; }
+.order-label small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); }
+.order-eye[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.order-spacer { visibility: hidden; }
