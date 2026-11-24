@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Courses</title>
+  <meta name="description" content="Liste de courses partagée, utilisable hors ligne.">
+  <meta name="theme-color" content="#0a0d0c" id="theme-color">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Courses">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Thème appliqué avant l'affichage, pour éviter un flash de couleur.
+    try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('courses.theme')) || 'dark'; }
+    catch (e) { document.documentElement.dataset.theme = 'dark'; }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-row">
+        <div>
+          <p class="eyebrow" id="greeting">Bonjour</p>
+          <h1>Courses</h1>
+        </div>
+        <div class="topbar-actions">
+          <button type="button" class="sync" id="sync" data-state="local" aria-label="Synchronisation">
+            <span class="sync-dot"></span><span class="sync-label">Local</span>
+          </button>
+          <button class="icon-btn" id="btn-view" aria-label="Afficher en tuiles">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-tiles"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-list"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+          </button>
+          <button class="icon-btn" id="btn-settings" aria-label="Partage et réglages">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0-4-4M2 21v-1a6 6 0 0 1 6-6h0a6 6 0 0 1 6 6v1M8 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM18 14a5 5 0 0 1 4 5v2"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <section class="hero" id="hero" hidden>
+      <div class="ring" id="ring" style="--pct: 0"><span id="ring-pct">0%</span></div>
+      <div class="hero-text">
+        <p class="hero-big" id="hero-big"></p>
+        <p class="progress-label" id="progress-label"></p>
+      </div>
+    </section>
+
+    <main id="list" class="list" aria-live="polite"></main>
+
+    <section class="empty" id="empty" hidden>
+      <div class="empty-art">🧺</div>
+      <h2>La liste est vide</h2>
+      <p>Ajoutez des articles ci-dessous, au clavier ou au micro 🎤.<br>Astuce : « 2 lait, farine 500g et des œufs ».</p>
+    </section>
+  </div>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <div class="chips" id="chips"></div>
+    <div class="composer-row">
+      <button type="button" class="catalog-btn" id="btn-catalog" aria-label="Catalogue d'articles">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18l-2 11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L3 7Z"/><path d="M8 7a4 4 0 0 1 8 0"/></svg>
+      </button>
+      <div class="field-pill">
+        <input id="input" type="text" inputmode="text" enterkeyhint="done"
+               placeholder="Ajouter un article…" aria-label="Ajouter un ou plusieurs articles" maxlength="300">
+        <button type="button" class="mic-btn" id="mic" aria-label="Dicter des articles">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+      </div>
+      <button type="submit" class="add-btn" aria-label="Ajouter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  </form>
+
+  <!-- Feuille d'édition d'un article -->
+  <dialog class="sheet" id="edit-sheet">
+    <form method="dialog" class="sheet-body" id="edit-form">
+      <div class="sheet-handle"></div>
+      <h2>Modifier l'article</h2>
+      <label class="field"><span>Article</span><input name="name" required maxlength="80"></label>
+      <label class="field"><span>Quantité</span><input name="qty" maxlength="20" placeholder="ex. 2, 500 g, 1 L"></label>
+      <label class="field"><span>Rayon</span><select name="category" id="edit-category"></select></label>
+      <label class="field"><span>Note</span><input name="note" maxlength="120" placeholder="ex. la marque bio"></label>
+      <div class="sheet-actions">
+        <button type="button" class="btn danger" id="edit-delete">Supprimer</button>
+        <button type="submit" class="btn primary" value="save" autofocus>Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Feuille de partage et réglages -->
+  <dialog class="sheet" id="settings-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <p class="version" id="version"></p>
+      <h2>Partage</h2>
+      <div id="share-on">
+        <p class="muted">Envoyez ce lien à la personne qui partage la liste avec vous. Vous verrez tous les deux la même liste, en temps réel.</p>
+        <div class="share-box">
+          <code id="share-code"></code>
+          <button type="button" class="btn" id="btn-share">Partager le lien</button>
+        </div>
+        <details class="join">
+          <summary>Rejoindre une autre liste</summary>
+          <div class="join-row">
+            <input id="join-input" placeholder="Code ou lien de la liste">
+            <button type="button" class="btn" id="btn-join">Rejoindre</button>
+          </div>
+        </details>
+      </div>
+      <div id="share-off" hidden>
+        <p class="muted">Le partage n'est pas encore activé : la liste est enregistrée uniquement sur cet appareil.
+          Renseignez la configuration Firebase dans <code>public/firebase-config.js</code> (voir le README) pour synchroniser la liste entre vos téléphones.</p>
+      </div>
+
+      <button type="button" class="siri-entry" id="btn-siri">
+        <span class="siri-icon">🎙️</span>
+        <span><strong>Ajouter avec Siri</strong><br><small>« Dis Siri, courses maison »</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
+      <h2>Magasin</h2>
+      <button type="button" class="siri-entry" id="btn-order">
+        <span class="siri-icon order-icon">🧭</span>
+        <span><strong>Ordre des rayons</strong><br><small>Suivre le parcours de votre magasin</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
+      <h2>Apparence</h2>
+      <div class="segmented" id="theme-picker" role="radiogroup" aria-label="Thème">
+        <button type="button" data-theme-value="dark" role="radio">🌙 Sombre</button>
+        <button type="button" data-theme-value="light" role="radio">☀️ Clair</button>
+        <button type="button" data-theme-value="auto" role="radio">⚙️ Auto</button>
+      </div>
+
+      <h2>Vous</h2>
+      <label class="field"><span>Votre prénom (affiché sur vos ajouts)</span><input id="me-input" maxlength="20" placeholder="ex. Camille"></label>
+
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Synchronisation -->
+  <dialog class="sheet" id="sync-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Synchronisation</h2>
+      <p class="sync-status" id="sync-status"></p>
+      <button type="button" class="btn primary wide" id="btn-refresh">🔄 Actualiser maintenant</button>
+      <p class="muted small-note">Force la reconnexion et récupère tout de suite les changements de l'autre téléphone.</p>
+      <button type="button" class="btn wide" id="btn-run-shortcut">🎙️ Récupérer les ajouts de Siri</button>
+      <p class="muted small-note">Lance votre raccourci qui transfère la liste « Courses » de Rappels dans l'app.
+        Revenez ensuite ici avec « ◀ Courses » en haut à gauche de l'écran.</p>
+      <details class="join">
+        <summary>Nom du raccourci</summary>
+        <div class="join-row"><input id="shortcut-name" placeholder="Transférer les courses"></div>
+      </details>
+      <div class="sheet-actions">
+        <button type="submit" class="btn">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Catalogue : ajouter sans clavier -->
+  <dialog class="sheet sheet-tall" id="catalog-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title-row">
+        <h2>Catalogue</h2>
+        <button type="submit" class="btn primary small">Terminé</button>
+      </div>
+      <input type="search" class="catalog-search" id="catalog-search" placeholder="Rechercher un article…" autocomplete="off" enterkeyhint="done">
+      <div id="catalog-body"></div>
+    </form>
+  </dialog>
+
+  <!-- Ordre des rayons -->
+  <dialog class="sheet" id="order-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Ordre des rayons</h2>
+      <p class="muted">Rangez les rayons dans l'ordre où vous les traversez en magasin. L'ordre est partagé avec les personnes de la liste.</p>
+      <ol class="order-list" id="order-list"></ol>
+      <div class="sheet-actions">
+        <button type="button" class="btn" id="order-reset">Ordre par défaut</button>
+        <button type="submit" class="btn primary">Terminé</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Reconnaissance vocale de Safari (expérimental) : appui long sur le micro -->
+  <dialog class="sheet" id="voice-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Micro de Safari <span class="badge">expérimental</span></h2>
+      <p class="muted">La reconnaissance vocale intégrée à Safari est instable dans les apps installées sur l'iPhone.
+        Essayez les réglages ci-dessous ; si l'un marche bien, dites-le pour qu'il devienne le comportement normal.</p>
+      <label class="switch"><input type="checkbox" id="voice-continuous"> Écoute continue</label>
+      <label class="switch"><input type="checkbox" id="voice-interim" checked> Résultats partiels pendant la dictée</label>
+      <button type="button" class="btn primary voice-start" id="voice-start">🎤 Démarrer l'écoute</button>
+      <p class="voice-status" id="voice-status">Touchez le bouton puis dictez, par exemple « du lait et des œufs ».</p>
+      <details class="join">
+        <summary>Journal de diagnostic</summary>
+        <pre class="voice-log" id="voice-log"></pre>
+      </details>
+      <div class="sheet-actions">
+        <button type="submit" class="btn">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Feuille de configuration du raccourci Siri -->
+  <dialog class="sheet" id="siri-sheet">
+    <form method="dialog" class="sheet-body">
+      <div class="sheet-handle"></div>
+      <h2>Ajouter avec Siri</h2>
+      <p class="muted">Créez une fois ce raccourci dans l'app <strong>Raccourcis</strong> de l'iPhone, puis dites :
+        <em>« Dis Siri, courses maison »</em>, attendez qu'il écoute, puis dites seulement les articles. Ils arrivent dans la liste partagée.</p>
+
+      <ol class="steps">
+        <li>Ouvrez l'app <strong>Raccourcis</strong>, touchez <strong>+</strong> en haut à droite, puis renommez le raccourci
+          <strong>Courses maison</strong> (c'est la phrase à dire à Siri). Évitez « ajoute aux courses » ou « liste de courses » :
+          Siri les confond avec sa liste des Rappels.</li>
+        <li>Ajoutez l'action <strong>Dicter le texte</strong>. Langue : <em>Français</em>. Arrêter l'écoute : <em>Après une pause</em>.</li>
+        <li>Ajoutez l'action <strong>Texte</strong> et collez-y :
+          <div class="copy-box"><code id="siri-body"></code><button type="button" class="btn" data-copy="siri-body">Copier</button></div>
+          Puis effacez le mot <code>TEXTE</code> (en gardant les guillemets autour) et remplacez-le par la variable
+          <strong>Texte dicté</strong>, proposée au-dessus du clavier.</li>
+        <li>Ajoutez l'action <strong>Obtenir le contenu de l'URL</strong> et collez cette adresse :
+          <div class="copy-box"><code id="siri-url"></code><button type="button" class="btn" data-copy="siri-url">Copier</button></div>
+          Touchez la flèche ⌄ pour afficher les options :
+          <ul>
+            <li>Méthode : <strong>POST</strong></li>
+            <li>En-têtes : ajoutez <code>Content-Type</code> avec la valeur <code>application/json</code></li>
+            <li>Corps de la requête : <strong>Fichier</strong>, puis choisissez la variable <strong>Texte</strong></li>
+          </ul></li>
+        <li>Facultatif : ajoutez l'action <strong>Énoncer le texte</strong> avec <em>C'est noté</em>.</li>
+      </ol>
+      <p class="muted"><strong>Sans les mains :</strong> Réglages › Accessibilité › Toucher › <strong>Toucher le dos</strong> ›
+        Toucher deux fois › choisissez <em>Courses maison</em>. Deux petites tapes au dos de l'iPhone, vous parlez, c'est ajouté.</p>
+      <p class="muted">Cette adresse contient le code de votre liste : ne la partagez qu'avec votre compagne.
+        Elle peut aussi ouvrir cet écran depuis son téléphone pour créer son raccourci.</p>
+
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="toast-action"></button>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
