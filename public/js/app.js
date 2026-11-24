@@ -130,6 +130,12 @@ function recordPurchase(item) {
   const kept = dates.sort((a, b) => a - b).slice(-12);
   historyMap = { ...historyMap, [key]: { ...prev, name: item.name, category: item.category, dates: kept } };
   store.recordPurchase(key, { name: item.name, category: item.category }, kept);
+  // Pour l'annulation : remet les dates d'avant.
+  const before = prev.dates || [];
+  return () => {
+    historyMap = { ...historyMap, [key]: { ...(historyMap[key] || prev), dates: before } };
+    store.recordPurchase(key, { name: item.name, category: item.category }, before);
+  };
 }
 
 // Écart habituel entre deux achats : médiane des écarts (insensible à un oubli ponctuel).
@@ -232,7 +238,7 @@ function setupForgot() {
     setTimeout(() => { renderForgotSheet(); renderForgotButton(); }, 350);
   });
   $('#forgot-all').addEventListener('click', () => {
-    forgottenItems().forEach(addEntry);
+    pushGroupUndo(forgottenItems().map((f) => addItem({ name: f.entry.name, qty: '', category: f.entry.category }, { silent: true, undo: false })));
     $('#forgot-list').querySelectorAll('li').forEach((li) => li.classList.add('added'));
     setTimeout(() => { sheet.close(); }, 400);
   });
@@ -298,27 +304,105 @@ function renderChips() {
   });
 }
 
+/* ---------------------------------------------------------------- Annuler */
+
+// Pile des dernières actions faites sur ce téléphone (20 maximum), chacune avec
+// sa fonction d'annulation. Le bouton « ↶ Annuler » apparaît après chaque action.
+const undoStack = [];
+let undoPillTimer;
+const itemExists = (id) => items.some((i) => i.id === id);
+
+function pushUndo(label, revert) {
+  if (typeof revert !== 'function') return;
+  undoStack.push({ label, revert });
+  if (undoStack.length > 20) undoStack.shift();
+  showUndoPill();
+}
+
+function showUndoPill() {
+  const pill = $('#undo-pill');
+  renderUndoButton();
+  if (!pill) return;
+  const last = undoStack[undoStack.length - 1];
+  if (!last) { pill.hidden = true; return; }
+  $('#undo-label').textContent = last.label;
+  pill.hidden = false;
+  pill.classList.remove('pop');
+  void pill.offsetWidth;
+  pill.classList.add('pop');
+  clearTimeout(undoPillTimer);
+  undoPillTimer = setTimeout(() => { pill.hidden = true; }, 6000);
+}
+
+function undoLast() {
+  const action = undoStack.pop();
+  if (!action) return;
+  try { action.revert(); } catch (err) { console.error(err); }
+  navigator.vibrate?.(15);
+  if (undoStack.length) {
+    showUndoPill(); // permet d'enchaîner les annulations
+  } else {
+    $('#undo-pill').hidden = true;
+    renderUndoButton();
+  }
+  toast(`↶ Annulé : ${action.label}`, '', null, 2500);
+}
+
+function renderUndoButton() {
+  const btn = $('#btn-undo-hero');
+  if (btn) btn.hidden = undoStack.length === 0;
+}
+
+function setupUndo() {
+  $('#undo-btn')?.addEventListener('click', undoLast);
+  $('#btn-undo-hero')?.addEventListener('click', undoLast);
+  renderUndoButton();
+}
+
+// Ajout annulé : on retire aussi l'utilisation comptée dans l'historique commun.
+function unremember(item) {
+  const key = normalize(item.name);
+  const prev = historyMap[key];
+  if (!prev) return;
+  historyMap = { ...historyMap, [key]: { ...prev, count: Math.max(0, (prev.count || 1) - 1) } };
+  store.recordHistory(key, { name: prev.name, category: prev.category }, -1);
+}
+
 /* ---------------------------------------------------------------- Actions */
 
 // Ajoute un article. `id` permet un identifiant déterministe (phrases Siri traitées
 // par deux téléphones en même temps : pas de doublon). `silent` évite les messages.
-function addItem({ name, qty, category, id, addedBy }, { silent = false } = {}) {
+// `undo: false` : l'appelant regroupe lui-même l'annulation (ajout de plusieurs articles).
+function addItem({ name, qty, category, id, addedBy }, { silent = false, undo = true } = {}) {
   name = capitalize(name.trim());
   if (!name) return;
+  const done = (result) => {
+    if (undo && result.revert) pushUndo(`« ${name} » ajouté`, result.revert);
+    return result;
+  };
   // Si l'article est déjà dans la liste (non coché), on met à jour au lieu de dupliquer.
   const existing = items.find((i) => !i.checked && normalize(i.name) === normalize(name));
   if (existing) {
-    if (qty && qty !== existing.qty) store.update(existing.id, { qty, updatedAt: Date.now() });
+    let revert = null;
+    if (qty && qty !== existing.qty) {
+      const prevQty = existing.qty || '';
+      store.update(existing.id, { qty, updatedAt: Date.now() });
+      revert = () => itemExists(existing.id) && store.update(existing.id, { qty: prevQty, updatedAt: Date.now() });
+    }
     if (!silent) toast(`« ${name} » est déjà dans la liste`);
     highlight.add(existing.id);
-    return { name, status: 'exists' };
+    return done({ name, status: 'exists', revert });
   }
   const checkedTwin = items.find((i) => i.checked && normalize(i.name) === normalize(name));
   if (checkedTwin) {
+    const before = { checked: true, qty: checkedTwin.qty || '', checkedBy: checkedTwin.checkedBy || '' };
     store.update(checkedTwin.id, { checked: false, qty: qty || checkedTwin.qty, updatedAt: Date.now() });
     remember(checkedTwin);
     highlight.add(checkedTwin.id);
-    return { name, status: 'added' };
+    return done({ name, status: 'added', revert: () => {
+      unremember(checkedTwin);
+      if (itemExists(checkedTwin.id)) store.update(checkedTwin.id, { ...before, updatedAt: Date.now() });
+    } });
   }
   const knownCategory = history_()[normalize(name)]?.category;
   const item = {
@@ -335,12 +419,24 @@ function addItem({ name, qty, category, id, addedBy }, { silent = false } = {}) 
   highlight.add(item.id);
   store.add(item);
   remember(item);
-  return { name, status: 'added' };
+  return done({ name, status: 'added', revert: () => {
+    unremember(item);
+    if (itemExists(item.id)) store.remove(item.id);
+  } });
+}
+
+// Une seule annulation pour un ajout groupé.
+function pushGroupUndo(results, verb = 'ajoutés') {
+  const reverts = results.filter((r) => r?.revert);
+  if (!reverts.length) return;
+  const label = reverts.length === 1 ? `« ${reverts[0].name} » ${verb.replace(/s$/, '')}` : `${reverts.length} articles ${verb}`;
+  pushUndo(label, () => reverts.slice().reverse().forEach((r) => r.revert()));
 }
 
 // Ajoute plusieurs articles et confirme toujours ce qui s'est passé.
 function addEntries(entries, prefix = '✓') {
-  const results = entries.map((e) => addItem(e, { silent: true })).filter(Boolean);
+  const results = entries.map((e) => addItem(e, { silent: true, undo: false })).filter(Boolean);
+  pushGroupUndo(results);
   const added = results.filter((r) => r.status === 'added').map((r) => r.name);
   const already = results.filter((r) => r.status === 'exists').map((r) => r.name);
   const parts = [];
@@ -353,7 +449,12 @@ function addEntries(entries, prefix = '✓') {
 }
 
 function toggle(item) {
-  if (!item.checked) recordPurchase(item);
+  const restoreDates = !item.checked ? recordPurchase(item) : null;
+  const before = { checked: item.checked, checkedBy: item.checkedBy || '' };
+  pushUndo(item.checked ? `« ${item.name} » remis dans la liste` : `« ${item.name} » mis dans le caddie`, () => {
+    restoreDates?.();
+    if (itemExists(item.id)) store.update(item.id, { ...before, updatedAt: Date.now() });
+  });
   store.update(item.id, {
     checked: !item.checked,
     checkedBy: !item.checked ? prefs.get('me', '') : '',
@@ -364,14 +465,14 @@ function toggle(item) {
 
 function removeItem(item) {
   store.remove(item.id);
-  toast(`« ${item.name} » supprimé`, 'Annuler', () => store.add(item));
+  pushUndo(`« ${item.name} » supprimé`, () => store.add(item));
 }
 
 function clearChecked() {
   const done = items.filter((i) => i.checked);
   if (!done.length) return;
   store.removeMany(done.map((i) => i.id));
-  toast(`${done.length} article${done.length > 1 ? 's' : ''} retiré${done.length > 1 ? 's' : ''}`, 'Annuler',
+  pushUndo(`${done.length} article${done.length > 1 ? 's' : ''} retiré${done.length > 1 ? 's' : ''} du caddie`,
     () => done.forEach((i) => store.add(i)));
 }
 
@@ -681,7 +782,10 @@ function setupSheets() {
       category: f.category.value,
       updatedAt: Date.now(),
     };
-    store.update(editing.id, patch);
+    const target = editing;
+    const before = { name: target.name, qty: target.qty || '', note: target.note || '', category: target.category };
+    store.update(target.id, patch);
+    pushUndo(`« ${target.name} » modifié`, () => itemExists(target.id) && store.update(target.id, { ...before, updatedAt: Date.now() }));
     // Mémorise le rayon choisi pour les prochaines fois.
     remember({ ...editing, ...patch }, { count: false });
     editing = null;
@@ -742,7 +846,7 @@ function processInbox() {
     if (handledInbox.has(msg.id)) continue;
     handledInbox.add(msg.id);
     parseMany(msg.text, { voice: true }).forEach((e, i) => {
-      addItem({ ...e, id: `${msg.id}-${i}`, addedBy: 'Siri' }, { silent: true });
+      addItem({ ...e, id: `${msg.id}-${i}`, addedBy: 'Siri' }, { silent: true, undo: false });
       added.push(e.name);
     });
     store.removeInbox(msg.id);
@@ -972,7 +1076,7 @@ function openVoiceLab() {
       voiceLog(`fin (${result ? 'texte reçu' : 'rien reçu'})`);
       if (result) {
         const entries = parseMany(result, { voice: true });
-        entries.forEach((entry) => addItem(entry, { silent: true }));
+        pushGroupUndo(entries.map((entry) => addItem(entry, { silent: true, undo: false })));
         renderChips();
         status.textContent = `✅ Ajouté : ${entries.map((x) => x.name).join(', ')}`;
         return;
@@ -1218,6 +1322,7 @@ function setupCatalog() {
     navigator.vibrate?.(10);
     if (existing) {
       store.remove(existing.id);           // toucher à nouveau : retirer de la liste
+      pushUndo(`« ${existing.name} » retiré`, () => store.add(existing));
       tile.classList.remove('in');
     } else {
       addItem({ name, qty: '', category: cat }, { silent: true });
@@ -1405,6 +1510,7 @@ async function main() {
   setupOrder();
   setupSyncSheet();
   setupForgot();
+  setupUndo();
 
   render();
   renderChips();
