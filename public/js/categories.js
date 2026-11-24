@@ -23,7 +23,7 @@ export const CATEGORIES = [
     'pates', 'spaghetti', 'penne', 'riz', 'semoule', 'quinoa', 'lentille', 'pois chiche', 'farine', 'huile',
     'vinaigre', 'sel', 'poivre', 'epice', 'moutarde', 'mayonnaise', 'ketchup', 'sauce', 'conserve', 'thon',
     'sardine', 'mais', 'olive', 'cornichon', 'bouillon', 'soupe', 'chips', 'cacahuete', 'aperitif', 'levure',
-    'chapelure', 'coulis', 'pesto', 'curry', 'paprika', 'cumin', 'herbes de provence', 'nouilles', 'gnocchi'] },
+    'chapelure', 'coulis', 'pesto', 'lait de coco', 'creme de coco', 'curry', 'paprika', 'cumin', 'herbes de provence', 'nouilles', 'gnocchi'] },
   { id: 'sucre', color: '#e879f9', label: 'Épicerie sucrée', emoji: '🍫', words: [
     'sucre', 'chocolat', 'cafe', 'the', 'tisane', 'cereale', 'muesli', 'granola', 'flocons', 'avoine',
     'confiture', 'miel', 'nutella', 'pate a tartiner', 'biscuit', 'gateau', 'compote', 'bonbon', 'madeleine',
