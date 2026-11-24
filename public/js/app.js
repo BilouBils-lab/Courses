@@ -45,6 +45,12 @@ function orderedCategories() {
   return [...CATEGORIES].sort((a, b) => rank(a) - rank(b));
 }
 
+// Rayons masqués (absents du magasin) : réglage partagé. « Autre » ne peut pas être masqué.
+const hiddenSet = () => new Set((Array.isArray(meta.hiddenCategories) ? meta.hiddenCategories : []).filter((id) => id !== 'autre'));
+const visibleCategories = () => { const h = hiddenSet(); return orderedCategories().filter((c) => !h.has(c.id)); };
+// Rayon d'affichage d'un article : un rayon inconnu ou masqué devient « Autre ».
+const displayCategory = (id) => (CATEGORY_BY_ID[id] && !hiddenSet().has(id) ? id : 'autre');
+
 /* ---------------------------------------------------------------- Liste partagée */
 
 function newListCode() {
@@ -320,7 +326,7 @@ function addItem({ name, qty, category, id, addedBy }, { silent = false } = {}) 
     name,
     qty: qty || '',
     note: '',
-    category: category || knownCategory || guessCategory(name),
+    category: category || displayCategory(knownCategory || guessCategory(name)),
     checked: false,
     addedBy: addedBy ?? prefs.get('me', ''),
     createdAt: Date.now(),
@@ -398,8 +404,8 @@ function render() {
 
   let html = '';
   const wrap = (inner) => (view === 'tiles' ? `<div class="tiles-grid">${inner}</div>` : inner);
-  for (const cat of orderedCategories()) {
-    const group = todo.filter((i) => (CATEGORY_BY_ID[i.category] ? i.category : 'autre') === cat.id).sort(byName);
+  for (const cat of visibleCategories()) {
+    const group = todo.filter((i) => displayCategory(i.category) === cat.id).sort(byName);
     if (!group.length) continue;
     html += `<section class="group" style="--cat: ${cat.color}">
       <div class="group-head"><span class="emoji">${cat.emoji}</span><span class="group-label">${cat.label}</span><span class="count">${group.length}</span></div>
@@ -653,7 +659,12 @@ function openEdit(item) {
   f.name.value = item.name;
   f.qty.value = item.qty || '';
   f.note.value = item.note || '';
-  f.category.value = CATEGORY_BY_ID[item.category] ? item.category : 'autre';
+  // Rayons proposés : les rayons visibles (+ celui de l'article s'il est masqué).
+  const current = CATEGORY_BY_ID[item.category] ? item.category : 'autre';
+  els.editCategory.innerHTML = orderedCategories()
+    .filter((c) => !hiddenSet().has(c.id) || c.id === current)
+    .map((c) => `<option value="${c.id}">${c.emoji} ${c.label}${hiddenSet().has(c.id) ? ' (masqué)' : ''}</option>`).join('');
+  f.category.value = current;
   openSheet(els.editSheet);
 }
 
@@ -1157,7 +1168,7 @@ function renderCatalog() {
     }
   }
   let found = 0;
-  for (const cat of orderedCategories()) {
+  for (const cat of visibleCategories()) {
     const entries = (CATALOG[cat.id] || []).filter(([name]) => match(name))
       .map(([name, emoji]) => ({ name, emoji, category: cat.id }));
     if (!entries.length) continue;
@@ -1220,10 +1231,15 @@ function setupCatalog() {
 function renderOrder() {
   const list = $('#order-list');
   const cats = orderedCategories();
+  const hidden = hiddenSet();
+  const eye = '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeOff = '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10.5 10.5 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.9 0 3.5-.6 4.9-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
   list.innerHTML = cats.map((c, i) => `
-    <li style="--cat: ${c.color}" data-id="${c.id}">
+    <li style="--cat: ${c.color}" data-id="${c.id}" class="${hidden.has(c.id) ? 'is-hidden' : ''}">
       <span class="order-emoji">${c.emoji}</span>
-      <span class="order-label">${c.label}</span>
+      <span class="order-label"><span class="order-name">${c.label}</span>${hidden.has(c.id) ? '<small>Masqué · articles dans « Autre »</small>' : ''}</span>
+      ${c.id === 'autre' ? '<span class="order-btn order-spacer"></span>' : `<button type="button" class="order-btn order-eye" data-toggle="${c.id}"
+        aria-label="${hidden.has(c.id) ? 'Afficher' : 'Masquer'} ${c.label}" aria-pressed="${hidden.has(c.id)}">${hidden.has(c.id) ? eyeOff : eye}</button>`}
       <button type="button" class="order-btn" data-move="-1" ${i === 0 ? 'disabled' : ''} aria-label="Monter ${c.label}">
         <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
       <button type="button" class="order-btn" data-move="1" ${i === cats.length - 1 ? 'disabled' : ''} aria-label="Descendre ${c.label}">
@@ -1242,6 +1258,18 @@ function setupOrder() {
     openSheet(sheet);
   });
   $('#order-list').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-toggle]');
+    if (t) {
+      const id = t.dataset.toggle;
+      const hidden = hiddenSet();
+      if (hidden.has(id)) hidden.delete(id); else hidden.add(id);
+      meta = { ...meta, hiddenCategories: [...hidden] };
+      store.setMeta({ hiddenCategories: [...hidden] });
+      renderOrder();
+      render();
+      navigator.vibrate?.(10);
+      return;
+    }
     const b = e.target.closest('[data-move]');
     if (!b) return;
     const ids = orderedCategories().map((c) => c.id);
@@ -1258,8 +1286,8 @@ function setupOrder() {
     $(`#order-list li[data-id="${id}"] [data-move="${b.dataset.move}"]`)?.focus({ preventScroll: true });
   });
   $('#order-reset').addEventListener('click', () => {
-    meta = { ...meta, categoryOrder: CATEGORIES.map((c) => c.id) };
-    store.setMeta({ categoryOrder: meta.categoryOrder });
+    meta = { ...meta, categoryOrder: CATEGORIES.map((c) => c.id), hiddenCategories: [] };
+    store.setMeta({ categoryOrder: meta.categoryOrder, hiddenCategories: [] });
     renderOrder();
     render();
   });

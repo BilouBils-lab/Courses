@@ -26,9 +26,11 @@ service cloud.firestore {
       allow create, update: if request.auth != null
         && listId.matches('^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$')
         && docId == 'settings'
-        && request.resource.data.keys().hasOnly(['categoryOrder', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['categoryOrder', 'hiddenCategories', 'updatedAt'])
         && (!('categoryOrder' in request.resource.data)
-            || (request.resource.data.categoryOrder is list && request.resource.data.categoryOrder.size() <= 30));
+            || (request.resource.data.categoryOrder is list && request.resource.data.categoryOrder.size() <= 30))
+        && (!('hiddenCategories' in request.resource.data)
+            || (request.resource.data.hiddenCategories is list && request.resource.data.hiddenCategories.size() <= 30));
     }
 
     // Historique partagé des articles (alimente « Fréquents » et suggestions).

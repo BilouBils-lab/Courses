@@ -135,7 +135,7 @@
       <h2>Magasin</h2>
       <button type="button" class="siri-entry" id="btn-order">
         <span class="siri-icon order-icon">🧭</span>
-        <span><strong>Ordre des rayons</strong><br><small>Suivre le parcours de votre magasin</small></span>
+        <span><strong>Rayons du magasin</strong><br><small>Ordre du parcours, rayons à masquer</small></span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
 
@@ -209,11 +209,12 @@
   <dialog class="sheet" id="order-sheet">
     <form method="dialog" class="sheet-body">
       <div class="sheet-handle"></div>
-      <h2>Ordre des rayons</h2>
-      <p class="muted">Rangez les rayons dans l'ordre où vous les traversez en magasin. L'ordre est partagé avec les personnes de la liste.</p>
+      <h2>Rayons du magasin</h2>
+      <p class="muted">Rangez les rayons dans l'ordre où vous les traversez avec ▲ ▼, et masquez avec 👁 ceux dont vous n'avez pas besoin.
+        Les articles d'un rayon masqué s'affichent dans « Autre ». Ces réglages sont partagés avec les personnes de la liste.</p>
       <ol class="order-list" id="order-list"></ol>
       <div class="sheet-actions">
-        <button type="button" class="btn" id="order-reset">Ordre par défaut</button>
+        <button type="button" class="btn" id="order-reset">Par défaut</button>
         <button type="submit" class="btn primary">Terminé</button>
       </div>
     </form>
