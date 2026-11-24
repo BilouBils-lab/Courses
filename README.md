@@ -35,9 +35,7 @@ La pastille en haut indique l'état : **Synchronisé**, **Envoi…**, **Hors lig
 
 ### 2. Mettre l'application en ligne
 
-Une PWA doit être servie en **HTTPS**. Deux options gratuites :
-
-**Option A — Firebase Hosting** (recommandée, même outil que la base)
+Une PWA doit être servie en **HTTPS**. L'application est hébergée gratuitement sur **Firebase Hosting**, le même outil que la base :
 
 ```bash
 npm install -g firebase-tools
@@ -51,12 +49,7 @@ firebase login
 firebase deploy
 ```
 
-L'adresse est affichée à la fin, du type `https://votre-projet.web.app`. Cette commande publie aussi les règles Firestore.
-
-**Option B — GitHub Pages**
-
-Dans le dépôt GitHub : **Settings › Pages › Source : GitHub Actions**. Le workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publie le site à chaque push sur `main`.
-Pour un dépôt privé, GitHub Pages nécessite un abonnement payant : utilisez plutôt l'option A.
+L'adresse est affichée à la fin, du type `https://votre-projet.web.app`. Cette commande publie aussi les règles Firestore. Seul le dossier `public/` est mis en ligne.
 
 ### 3. Installer sur les téléphones et partager
 
