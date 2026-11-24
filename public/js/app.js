@@ -92,7 +92,7 @@ function history_() { return historyMap; }
 function remember(item, { count = true } = {}) {
   const key = normalize(item.name);
   const prev = historyMap[key] || { count: 0 };
-  historyMap = { ...historyMap, [key]: { name: item.name, category: item.category, count: prev.count + (count ? 1 : 0), last: Date.now() } };
+  historyMap = { ...historyMap, [key]: { ...prev, name: item.name, category: item.category, count: prev.count + (count ? 1 : 0), last: Date.now() } };
   store.recordHistory(key, { name: item.name, category: item.category }, count ? 1 : 0);
 }
 
@@ -107,6 +107,129 @@ function migrateLocalHistory() {
     store.recordHistory(key, { name: e.name, category: e.category || guessCategory(e.name) }, Math.max(1, e.count || 1));
   }
   prefs.set('historyShared', true);
+}
+
+/* ---------------------------------------------------------------- Rien oublié ? */
+
+const DAY = 24 * 3600 * 1000;
+
+// Article mis dans le caddie : on garde les 12 dernières dates d'achat.
+// Deux achats à moins de 12 h d'écart comptent pour un seul (coché, décoché, recoché…).
+function recordPurchase(item) {
+  const key = normalize(item.name);
+  const prev = historyMap[key] || { name: item.name, category: item.category, count: 1 };
+  const now = Date.now();
+  const dates = (prev.dates || []).filter((d) => now - d > 12 * 3600 * 1000);
+  dates.push(now);
+  const kept = dates.sort((a, b) => a - b).slice(-12);
+  historyMap = { ...historyMap, [key]: { ...prev, name: item.name, category: item.category, dates: kept } };
+  store.recordPurchase(key, { name: item.name, category: item.category }, kept);
+}
+
+// Écart habituel entre deux achats : médiane des écarts (insensible à un oubli ponctuel).
+function usualInterval(dates) {
+  if (!dates || dates.length < 2) return 0;
+  const gaps = dates.slice(1).map((d, i) => d - dates[i]).filter((g) => g > 12 * 3600 * 1000).sort((a, b) => a - b);
+  if (!gaps.length) return 0;
+  const mid = Math.floor(gaps.length / 2);
+  return gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
+}
+
+const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
+const days = (ms) => Math.max(1, Math.round(ms / DAY));
+
+// Articles probablement à racheter, absents de la liste (non cochés).
+function forgottenItems() {
+  const inList = new Set(items.filter((i) => !i.checked).map((i) => normalize(i.name)));
+  const snoozed = prefs.get('forgotSnooze', {});
+  const now = Date.now();
+  const out = [];
+  for (const [key, e] of Object.entries(historyMap)) {
+    if (!e?.name || inList.has(key) || (snoozed[key] || 0) > now) continue;
+    const dates = (e.dates || []).slice().sort((a, b) => a - b);
+    const lastBuy = dates[dates.length - 1] || 0;
+    const interval = usualInterval(dates);
+    if (interval) {
+      // Rythme connu : à proposer dès 85 % de l'écart habituel.
+      const ratio = (now - lastBuy) / interval;
+      if (ratio >= 0.85) {
+        out.push({ key, entry: e, score: ratio, interval,
+          reason: `Environ tous les ${plural(days(interval), 'jour')} · dernier achat il y a ${plural(days(now - lastBuy), 'jour')}` });
+      }
+    } else if ((e.count || 0) >= 2) {
+      // Pas encore assez d'achats : articles fréquents non utilisés depuis quelques jours.
+      const since = now - Math.max(lastBuy, e.last || 0);
+      if (since >= 4 * DAY) {
+        out.push({ key, entry: e, score: 0.5 + Math.min(0.4, (e.count || 0) / 50), interval: 7 * DAY,
+          reason: `Souvent ajouté (${e.count} fois) · pas depuis ${plural(days(since), 'jour')}` });
+      }
+    }
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, 15);
+}
+
+function renderForgotButton() {
+  const btn = $('#btn-forgot');
+  if (!btn) return;
+  const list = forgottenItems();
+  btn.hidden = list.length === 0;
+  $('#forgot-badge').textContent = list.length;
+  $('#forgot-sub').textContent = list.length
+    ? `${list.slice(0, 3).map((f) => f.entry.name).join(', ')}${list.length > 3 ? '…' : ''}`
+    : '';
+}
+
+function renderForgotSheet() {
+  const list = forgottenItems();
+  const learned = list.some((f) => (f.entry.dates || []).length >= 2);
+  $('#forgot-intro').textContent = list.length
+    ? (learned
+      ? 'D\'après votre rythme d\'achat, ces articles sont sans doute à racheter.'
+      : 'Vos articles fréquents absents de la liste. Les propositions s\'affineront au fil de vos courses, à mesure que l\'app apprend votre rythme d\'achat.')
+    : '👍 Rien ne semble manquer pour l\'instant.';
+  $('#forgot-all').hidden = list.length === 0;
+  $('#forgot-list').innerHTML = list.map((f) => `
+    <li style="--cat: ${CATEGORY_BY_ID[f.entry.category]?.color || 'var(--accent)'}" data-key="${escapeHtml(f.key)}">
+      <span class="forgot-emoji">${iconFor(f.entry.name, f.entry.category)}</span>
+      <span class="forgot-info"><strong>${escapeHtml(f.entry.name)}</strong><small>${escapeHtml(f.reason)}</small></span>
+      <button type="button" class="forgot-skip" data-act="skip" aria-label="Pas besoin de ${escapeHtml(f.entry.name)}">Pas besoin</button>
+      <button type="button" class="forgot-add" data-act="add" aria-label="Ajouter ${escapeHtml(f.entry.name)}">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </li>`).join('');
+}
+
+function setupForgot() {
+  const sheet = $('#forgot-sheet');
+  const btn = $('#btn-forgot');
+  if (!sheet || !btn) return;
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
+  btn.addEventListener('click', () => { renderForgotSheet(); openSheet(sheet); });
+
+  const addEntry = (f) => addItem({ name: f.entry.name, qty: '', category: f.entry.category }, { silent: true });
+  $('#forgot-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const key = b.closest('li').dataset.key;
+    const f = forgottenItems().find((x) => x.key === key);
+    if (!f) return;
+    if (b.dataset.act === 'add') {
+      addEntry(f);
+    } else {
+      // « Pas besoin » : masqué pendant la moitié de l'écart habituel (au moins 2 jours), sur ce téléphone.
+      const snooze = prefs.get('forgotSnooze', {});
+      snooze[key] = Date.now() + Math.max(2 * DAY, f.interval / 2);
+      prefs.set('forgotSnooze', snooze);
+    }
+    navigator.vibrate?.(10);
+    const li = b.closest('li');
+    li.classList.add(b.dataset.act === 'add' ? 'added' : 'skipped');
+    setTimeout(() => { renderForgotSheet(); renderForgotButton(); }, 350);
+  });
+  $('#forgot-all').addEventListener('click', () => {
+    forgottenItems().forEach(addEntry);
+    $('#forgot-list').querySelectorAll('li').forEach((li) => li.classList.add('added'));
+    setTimeout(() => { sheet.close(); }, 400);
+  });
 }
 
 function forgetSuggestion(entry) {
@@ -224,6 +347,7 @@ function addEntries(entries, prefix = '✓') {
 }
 
 function toggle(item) {
+  if (!item.checked) recordPurchase(item);
   store.update(item.id, {
     checked: !item.checked,
     checkedBy: !item.checked ? prefs.get('me', '') : '',
@@ -296,6 +420,7 @@ function render() {
   }
   els.list.innerHTML = html;
   els.list.classList.toggle('tiles', view === 'tiles');
+  renderForgotButton();
   if ($('#catalog-sheet')?.open) renderCatalog();
   // Met en évidence les articles qui viennent d'être ajoutés et fait défiler jusqu'à eux.
   let first = null;
@@ -1251,6 +1376,7 @@ async function main() {
   setupCatalog();
   setupOrder();
   setupSyncSheet();
+  setupForgot();
 
   render();
   renderChips();
@@ -1262,6 +1388,7 @@ async function main() {
   store.subscribeHistory((next) => {
     historyMap = next || {};
     renderChips();
+    renderForgotButton();
     if ($('#catalog-sheet')?.open) renderCatalog();
   });
   migrateLocalHistory();

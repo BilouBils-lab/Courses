@@ -8,7 +8,8 @@
 //             subscribeInbox(onMessages), removeInbox(id)  (phrases envoyées par Siri),
 //             subscribeMeta(onMeta), setMeta(patch)        (réglages partagés : ordre des rayons),
 //             subscribeHistory(onHistory), recordHistory(key, entry, by), removeHistory(key), restoreHistory(key, entry)
-//             (historique des articles, partagé : alimente « Fréquents » et suggestions)
+//             recordPurchase(key, entry, dates)
+//             (historique des articles, partagé : alimente « Fréquents », suggestions et « Rien oublié ? »)
 
 // Identifiant de document sûr à partir d'une clé d'article (« pommes de terre » → « pommes-de-terre »).
 export const historyId = (key) => key.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100) || 'article';
@@ -89,7 +90,13 @@ export class LocalStore {
   recordHistory(key, { name, category }, by = 1) {
     const h = this.#loadHistory();
     const prev = h[key] || { count: 0 };
-    h[key] = { name, category, count: prev.count + by, last: Date.now() };
+    h[key] = { ...prev, name, category, count: prev.count + by, last: Date.now() };
+    this.#saveHistory(h);
+  }
+
+  recordPurchase(key, { name, category }, dates) {
+    const h = this.#loadHistory();
+    h[key] = { count: 1, ...h[key], name, category, dates };
     this.#saveHistory(h);
   }
 
@@ -228,7 +235,12 @@ export class FirebaseStore {
         const h = {};
         snap.docs.forEach((d) => {
           const e = d.data();
-          if (e?.name) h[normalize(e.name)] = { name: e.name, category: e.category || 'autre', count: e.count || 0, last: e.last || 0 };
+          if (e?.name) {
+            h[normalize(e.name)] = {
+              name: e.name, category: e.category || 'autre', count: e.count || 0, last: e.last || 0,
+              dates: Array.isArray(e.dates) ? e.dates : [],
+            };
+          }
         });
         onHistory(h, { fromServer: !snap.metadata.fromCache });
       },
@@ -241,6 +253,11 @@ export class FirebaseStore {
     this.#write(() => this.fs.setDoc(this.fs.doc(this.historyCol, historyId(key)), {
       name, category, count: this.fs.increment(by), last: Date.now(),
     }, { merge: true }));
+  }
+
+  // Dates d'achat (article mis dans le caddie) : servent à « Rien oublié ? ».
+  recordPurchase(key, { name, category }, dates) {
+    this.#write(() => this.fs.setDoc(this.fs.doc(this.historyCol, historyId(key)), { name, category, dates }, { merge: true }));
   }
 
   removeHistory(key) {
