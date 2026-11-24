@@ -563,6 +563,7 @@ function tileHtml(item) {
       <div class="item-inner" role="button" tabindex="0" aria-pressed="${item.checked}" aria-label="${escapeHtml(item.name)}">
         <span class="tile-emoji">${iconFor(item.name, item.category)}</span>
         <span class="tile-name">${escapeHtml(item.name)}</span>
+        ${item.note ? `<span class="tile-note" title="${escapeHtml(item.note)}">📝 ${escapeHtml(item.note)}</span>` : ''}
         ${item.qty ? `<span class="qty tile-qty">${escapeHtml(item.qty)}</span>` : ''}
         ${by ? `<span class="tile-by" title="ajouté par ${escapeHtml(by)}">${escapeHtml(by.charAt(0).toUpperCase())}</span>` : ''}
         <span class="tile-check">${checkSvg}</span>
