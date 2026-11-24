@@ -308,6 +308,7 @@ button:focus:not(:focus-visible) { outline: none; }
   border-radius: 999px; padding: 8px 13px; font-size: 14px; font-weight: 600;
 }
 .chip:active { transform: scale(.95); background: var(--surface-3); }
+.chip { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 
 .composer-row { display: flex; align-items: center; gap: 10px; }
 .field-pill {
