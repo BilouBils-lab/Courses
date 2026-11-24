@@ -205,12 +205,15 @@
   <!-- Catalogue : ajouter sans clavier -->
   <dialog class="sheet sheet-tall" id="catalog-sheet">
     <form method="dialog" class="sheet-body">
-      <div class="sheet-handle"></div>
-      <div class="sheet-title-row">
-        <h2>Catalogue</h2>
-        <button type="submit" class="btn primary small">Terminé</button>
+      <!-- En-tête fixe : titre, « Terminé » et recherche restent visibles pendant le défilement -->
+      <div class="catalog-head">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title-row">
+          <h2>Catalogue</h2>
+          <button type="submit" class="btn primary small">Terminé</button>
+        </div>
+        <input type="search" class="catalog-search" id="catalog-search" placeholder="Rechercher un article…" autocomplete="off" enterkeyhint="done">
       </div>
-      <input type="search" class="catalog-search" id="catalog-search" placeholder="Rechercher un article…" autocomplete="off" enterkeyhint="done">
       <div id="catalog-body"></div>
     </form>
   </dialog>
